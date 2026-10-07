@@ -120,10 +120,7 @@ python eval/run_eval.py
 - [x] Cross-encoder reranking
 - [x] Local LLM generation with citations
 - [x] RAGAS evaluation pipeline
-- [ ] Tracing and latency logging (p50 / p95), cost per request
-- [ ] GitHub Actions: run the eval on every push and fail on quality regression
-- [ ] Code-level citation checker
-- [ ] Larger corpus and better chunk-level section labels
+
 
 ---
 
