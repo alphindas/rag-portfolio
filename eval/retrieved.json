@@ -1,0 +1,222 @@
+[
+  {
+    "user_input": "What was the mud weight on Condor-7 on Day 4?",
+    "reference": "9.2 ppg.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md::0",
+        "fused_score": 0.03225806451612903,
+        "text": "Well: Condor-7\nReport Date: Day 4\nOperator: Meridian Resources\nRig: Rig 88\nReport prepared by: T. Okafor, Company Man\n\nDrilled surface hole section from 620 ft to 1,340 ft using 17 1/2\" bit. Rate of penetration averaged 24.6 ft/hr through unconsolidated formation. Hole conditions stable, no losses observed.\n\nMud type: Spud mud, bentonite-based.\nMud weight: 9.2 ppg.\nFunnel viscosity: 38 sec/qt.\nSand content: 1.1%.\n\n1.0 hour non-productive time due to a delayed mud delivery from the supply base. Operations otherwise continuous.\n\nRoutine safety inspection of surface equipment completed. All permits current. No incidents reported.\n\n12 rig crew, 1 mud engineer, 1 company man.\n\nContinue drilling surface hole to planned setting depth of 1,500 ft, then run and cement surface casing.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md",
+        "header_path": "Daily Drilling Report -- Condor-7 > Report Info",
+        "rerank_score": 0.999248206615448
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day05.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Well: Condor-7\nReport Date: Day 5\nOperator: Meridian Resources\nRig: Rig 88\nReport prepared by: T. Okafor, Company Man\n\nReached surface casing setting depth of 1,505 ft. Circulated hole clean, conducted wiper trip to surface, and ran 13 3/8\" surface casing to bottom without incident.\n\nMud type: Spud mud, bentonite-based.\nMud weight: 9.3 ppg.\nFunnel viscosity: 39 sec/qt.\nSand content: 0.9%.\n\n3.5 hours non-productive time recorded: waiting on cement unit, which arrived late to location due to a mechanical breakdown en route.\n\nOne first-aid case: crew member sustained a minor hand laceration while handling casing tongs. Treated on site, no further medical attention required. Incident report filed and reviewed with crew.\n\n12 rig crew, 1 mud engineer, 1 company man, 4-person cementing crew.\n\nCement surface casing, wait on cement, and nipple up BOP stack prior to drilling ahead in the intermediate section.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day05.md",
+        "header_path": "Daily Drilling Report -- Condor-7 > Report Info",
+        "rerank_score": 0.991908848285675
+      }
+    ]
+  },
+  {
+    "user_input": "What was the average rate of penetration on Falcon-1 Day 12?",
+    "reference": "11.7 ft/hr.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Well: Falcon-1\nReport Date: Day 12\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilling continued in the 12 1/4\" hole section from 8,410 ft to 8,690 ft over the 24-hour reporting period. Rate of penetration averaged 11.7 ft/hr. Circulated bottoms up twice for hole cleaning before continuing to drill ahead. No connections gas observed above background.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 10.8 ppg.\nFunnel viscosity: 42 sec/qt.\nChlorides: 18,500 mg/L.\nSolids content: 6.2%.\n\n2.5 hours non-productive time recorded due to a top drive hydraulic leak. Maintenance crew replaced a hydraulic hose fitting; operations resumed at 04:30.\n\nOne near-miss reported: a pipe wrench left on the rig floor walkway during a connection. Item removed immediately, toolbox talk held with floor crew on housekeeping standards. No lost-time incidents.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller.\n\nContinue drilling ahead to planned casing point at approximately 8,950 ft. Run wiper trip if hole conditions deteriorate.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.9991304278373718
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md::0",
+        "fused_score": 0.03225806451612903,
+        "text": "Well: Falcon-1\nReport Date: Day 13\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilled from 8,690 ft to 8,955 ft, reaching planned casing point in the 12 1/4\" section. Rate of penetration averaged 13.2 ft/hr. Circulated hole clean and conditioned mud prior to running casing.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 11.1 ppg, increased from prior day to manage anticipated pore pressure at casing point.\nFunnel viscosity: 45 sec/qt.\nChlorides: 19,200 mg/L.\nSolids content: 6.8%.\n\nNo non-productive time recorded during this reporting period.\n\nPre-job safety meeting held prior to casing running operations. No incidents or near-misses reported.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller, 3-person casing crew mobilized for tomorrow's run.\n\nRun 9 5/8\" casing to 8,955 ft, cement casing string, and perform pressure test prior to drilling out.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.9859309196472168
+      }
+    ]
+  },
+  {
+    "user_input": "Was anyone injured on Condor-7?",
+    "reference": "Yes, on Day 5 a crew member sustained a minor hand laceration while handling casing tongs; treated on site, no further medical attention required.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day05.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Well: Condor-7\nReport Date: Day 5\nOperator: Meridian Resources\nRig: Rig 88\nReport prepared by: T. Okafor, Company Man\n\nReached surface casing setting depth of 1,505 ft. Circulated hole clean, conducted wiper trip to surface, and ran 13 3/8\" surface casing to bottom without incident.\n\nMud type: Spud mud, bentonite-based.\nMud weight: 9.3 ppg.\nFunnel viscosity: 39 sec/qt.\nSand content: 0.9%.\n\n3.5 hours non-productive time recorded: waiting on cement unit, which arrived late to location due to a mechanical breakdown en route.\n\nOne first-aid case: crew member sustained a minor hand laceration while handling casing tongs. Treated on site, no further medical attention required. Incident report filed and reviewed with crew.\n\n12 rig crew, 1 mud engineer, 1 company man, 4-person cementing crew.\n\nCement surface casing, wait on cement, and nipple up BOP stack prior to drilling ahead in the intermediate section.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day05.md",
+        "header_path": "Daily Drilling Report -- Condor-7 > Report Info",
+        "rerank_score": 0.16861698031425476
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md::0",
+        "fused_score": 0.03225806451612903,
+        "text": "Well: Condor-7\nReport Date: Day 4\nOperator: Meridian Resources\nRig: Rig 88\nReport prepared by: T. Okafor, Company Man\n\nDrilled surface hole section from 620 ft to 1,340 ft using 17 1/2\" bit. Rate of penetration averaged 24.6 ft/hr through unconsolidated formation. Hole conditions stable, no losses observed.\n\nMud type: Spud mud, bentonite-based.\nMud weight: 9.2 ppg.\nFunnel viscosity: 38 sec/qt.\nSand content: 1.1%.\n\n1.0 hour non-productive time due to a delayed mud delivery from the supply base. Operations otherwise continuous.\n\nRoutine safety inspection of surface equipment completed. All permits current. No incidents reported.\n\n12 rig crew, 1 mud engineer, 1 company man.\n\nContinue drilling surface hole to planned setting depth of 1,500 ft, then run and cement surface casing.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md",
+        "header_path": "Daily Drilling Report -- Condor-7 > Report Info",
+        "rerank_score": 0.02183111198246479
+      }
+    ]
+  },
+  {
+    "user_input": "Was anyone injured on Falcon-1?",
+    "reference": "No injuries. Day 12 had a near-miss (a pipe wrench left on the rig floor walkway during a connection), but no lost-time incidents were reported on either day.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Well: Falcon-1\nReport Date: Day 12\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilling continued in the 12 1/4\" hole section from 8,410 ft to 8,690 ft over the 24-hour reporting period. Rate of penetration averaged 11.7 ft/hr. Circulated bottoms up twice for hole cleaning before continuing to drill ahead. No connections gas observed above background.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 10.8 ppg.\nFunnel viscosity: 42 sec/qt.\nChlorides: 18,500 mg/L.\nSolids content: 6.2%.\n\n2.5 hours non-productive time recorded due to a top drive hydraulic leak. Maintenance crew replaced a hydraulic hose fitting; operations resumed at 04:30.\n\nOne near-miss reported: a pipe wrench left on the rig floor walkway during a connection. Item removed immediately, toolbox talk held with floor crew on housekeeping standards. No lost-time incidents.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller.\n\nContinue drilling ahead to planned casing point at approximately 8,950 ft. Run wiper trip if hole conditions deteriorate.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.00813949666917324
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md::0",
+        "fused_score": 0.03225806451612903,
+        "text": "Well: Falcon-1\nReport Date: Day 13\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilled from 8,690 ft to 8,955 ft, reaching planned casing point in the 12 1/4\" section. Rate of penetration averaged 13.2 ft/hr. Circulated hole clean and conditioned mud prior to running casing.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 11.1 ppg, increased from prior day to manage anticipated pore pressure at casing point.\nFunnel viscosity: 45 sec/qt.\nChlorides: 19,200 mg/L.\nSolids content: 6.8%.\n\nNo non-productive time recorded during this reporting period.\n\nPre-job safety meeting held prior to casing running operations. No incidents or near-misses reported.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller, 3-person casing crew mobilized for tomorrow's run.\n\nRun 9 5/8\" casing to 8,955 ft, cement casing string, and perform pressure test prior to drilling out.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.007451704703271389
+      }
+    ]
+  },
+  {
+    "user_input": "What was Falcon-1's mud weight on the day it reached casing point?",
+    "reference": "11.1 ppg, on Day 13, increased from the prior day to manage anticipated pore pressure at the casing point.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Well: Falcon-1\nReport Date: Day 13\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilled from 8,690 ft to 8,955 ft, reaching planned casing point in the 12 1/4\" section. Rate of penetration averaged 13.2 ft/hr. Circulated hole clean and conditioned mud prior to running casing.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 11.1 ppg, increased from prior day to manage anticipated pore pressure at casing point.\nFunnel viscosity: 45 sec/qt.\nChlorides: 19,200 mg/L.\nSolids content: 6.8%.\n\nNo non-productive time recorded during this reporting period.\n\nPre-job safety meeting held prior to casing running operations. No incidents or near-misses reported.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller, 3-person casing crew mobilized for tomorrow's run.\n\nRun 9 5/8\" casing to 8,955 ft, cement casing string, and perform pressure test prior to drilling out.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.9991056323051453
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md::0",
+        "fused_score": 0.03200204813108039,
+        "text": "Well: Falcon-1\nReport Date: Day 12\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilling continued in the 12 1/4\" hole section from 8,410 ft to 8,690 ft over the 24-hour reporting period. Rate of penetration averaged 11.7 ft/hr. Circulated bottoms up twice for hole cleaning before continuing to drill ahead. No connections gas observed above background.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 10.8 ppg.\nFunnel viscosity: 42 sec/qt.\nChlorides: 18,500 mg/L.\nSolids content: 6.2%.\n\n2.5 hours non-productive time recorded due to a top drive hydraulic leak. Maintenance crew replaced a hydraulic hose fitting; operations resumed at 04:30.\n\nOne near-miss reported: a pipe wrench left on the rig floor walkway during a connection. Item removed immediately, toolbox talk held with floor crew on housekeeping standards. No lost-time incidents.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller.\n\nContinue drilling ahead to planned casing point at approximately 8,950 ft. Run wiper trip if hole conditions deteriorate.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.997660756111145
+      }
+    ]
+  },
+  {
+    "user_input": "Which well experienced downtime due to a cementing unit delay?",
+    "reference": "Condor-7, on Day 5 -- 3.5 hours of NPT waiting on the cement unit, which arrived late due to a mechanical breakdown en route.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day05.md::0",
+        "fused_score": 0.03252247488101534,
+        "text": "Well: Condor-7\nReport Date: Day 5\nOperator: Meridian Resources\nRig: Rig 88\nReport prepared by: T. Okafor, Company Man\n\nReached surface casing setting depth of 1,505 ft. Circulated hole clean, conducted wiper trip to surface, and ran 13 3/8\" surface casing to bottom without incident.\n\nMud type: Spud mud, bentonite-based.\nMud weight: 9.3 ppg.\nFunnel viscosity: 39 sec/qt.\nSand content: 0.9%.\n\n3.5 hours non-productive time recorded: waiting on cement unit, which arrived late to location due to a mechanical breakdown en route.\n\nOne first-aid case: crew member sustained a minor hand laceration while handling casing tongs. Treated on site, no further medical attention required. Incident report filed and reviewed with crew.\n\n12 rig crew, 1 mud engineer, 1 company man, 4-person cementing crew.\n\nCement surface casing, wait on cement, and nipple up BOP stack prior to drilling ahead in the intermediate section.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day05.md",
+        "header_path": "Daily Drilling Report -- Condor-7 > Report Info",
+        "rerank_score": 0.06533361971378326
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md::0",
+        "fused_score": 0.03149801587301587,
+        "text": "Well: Condor-7\nReport Date: Day 4\nOperator: Meridian Resources\nRig: Rig 88\nReport prepared by: T. Okafor, Company Man\n\nDrilled surface hole section from 620 ft to 1,340 ft using 17 1/2\" bit. Rate of penetration averaged 24.6 ft/hr through unconsolidated formation. Hole conditions stable, no losses observed.\n\nMud type: Spud mud, bentonite-based.\nMud weight: 9.2 ppg.\nFunnel viscosity: 38 sec/qt.\nSand content: 1.1%.\n\n1.0 hour non-productive time due to a delayed mud delivery from the supply base. Operations otherwise continuous.\n\nRoutine safety inspection of surface equipment completed. All permits current. No incidents reported.\n\n12 rig crew, 1 mud engineer, 1 company man.\n\nContinue drilling surface hole to planned setting depth of 1,500 ft, then run and cement surface casing.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md",
+        "header_path": "Daily Drilling Report -- Condor-7 > Report Info",
+        "rerank_score": 0.0012208371190354228
+      }
+    ]
+  },
+  {
+    "user_input": "What safety incident occurred on Falcon-1 Day 12?",
+    "reference": "A near-miss: a pipe wrench was left on the rig floor walkway during a connection. It was removed immediately and a toolbox talk was held with the floor crew on housekeeping standards. No lost-time incidents.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md::0",
+        "fused_score": 0.032266458495966696,
+        "text": "Well: Falcon-1\nReport Date: Day 12\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilling continued in the 12 1/4\" hole section from 8,410 ft to 8,690 ft over the 24-hour reporting period. Rate of penetration averaged 11.7 ft/hr. Circulated bottoms up twice for hole cleaning before continuing to drill ahead. No connections gas observed above background.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 10.8 ppg.\nFunnel viscosity: 42 sec/qt.\nChlorides: 18,500 mg/L.\nSolids content: 6.2%.\n\n2.5 hours non-productive time recorded due to a top drive hydraulic leak. Maintenance crew replaced a hydraulic hose fitting; operations resumed at 04:30.\n\nOne near-miss reported: a pipe wrench left on the rig floor walkway during a connection. Item removed immediately, toolbox talk held with floor crew on housekeeping standards. No lost-time incidents.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller.\n\nContinue drilling ahead to planned casing point at approximately 8,950 ft. Run wiper trip if hole conditions deteriorate.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.9469186067581177
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md::0",
+        "fused_score": 0.03225806451612903,
+        "text": "Well: Falcon-1\nReport Date: Day 13\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilled from 8,690 ft to 8,955 ft, reaching planned casing point in the 12 1/4\" section. Rate of penetration averaged 13.2 ft/hr. Circulated hole clean and conditioned mud prior to running casing.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 11.1 ppg, increased from prior day to manage anticipated pore pressure at casing point.\nFunnel viscosity: 45 sec/qt.\nChlorides: 19,200 mg/L.\nSolids content: 6.8%.\n\nNo non-productive time recorded during this reporting period.\n\nPre-job safety meeting held prior to casing running operations. No incidents or near-misses reported.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller, 3-person casing crew mobilized for tomorrow's run.\n\nRun 9 5/8\" casing to 8,955 ft, cement casing string, and perform pressure test prior to drilling out.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.3433108925819397
+      }
+    ]
+  },
+  {
+    "user_input": "What was Falcon-1's mud weight on Day 13, and why was it increased?",
+    "reference": "11.1 ppg, increased from the prior day to manage anticipated pore pressure at the casing point.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Well: Falcon-1\nReport Date: Day 13\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilled from 8,690 ft to 8,955 ft, reaching planned casing point in the 12 1/4\" section. Rate of penetration averaged 13.2 ft/hr. Circulated hole clean and conditioned mud prior to running casing.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 11.1 ppg, increased from prior day to manage anticipated pore pressure at casing point.\nFunnel viscosity: 45 sec/qt.\nChlorides: 19,200 mg/L.\nSolids content: 6.8%.\n\nNo non-productive time recorded during this reporting period.\n\nPre-job safety meeting held prior to casing running operations. No incidents or near-misses reported.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller, 3-person casing crew mobilized for tomorrow's run.\n\nRun 9 5/8\" casing to 8,955 ft, cement casing string, and perform pressure test prior to drilling out.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.9994660019874573
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md::0",
+        "fused_score": 0.03200204813108039,
+        "text": "Well: Falcon-1\nReport Date: Day 12\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilling continued in the 12 1/4\" hole section from 8,410 ft to 8,690 ft over the 24-hour reporting period. Rate of penetration averaged 11.7 ft/hr. Circulated bottoms up twice for hole cleaning before continuing to drill ahead. No connections gas observed above background.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 10.8 ppg.\nFunnel viscosity: 42 sec/qt.\nChlorides: 18,500 mg/L.\nSolids content: 6.2%.\n\n2.5 hours non-productive time recorded due to a top drive hydraulic leak. Maintenance crew replaced a hydraulic hose fitting; operations resumed at 04:30.\n\nOne near-miss reported: a pipe wrench left on the rig floor walkway during a connection. Item removed immediately, toolbox talk held with floor crew on housekeeping standards. No lost-time incidents.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller.\n\nContinue drilling ahead to planned casing point at approximately 8,950 ft. Run wiper trip if hole conditions deteriorate.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.6373522877693176
+      }
+    ]
+  },
+  {
+    "user_input": "What was Falcon-1's mud weight on Day 13, and why was it increased?",
+    "reference": "11.1 ppg, increased from the prior day to manage anticipated pore pressure at the casing point.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Well: Falcon-1\nReport Date: Day 13\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilled from 8,690 ft to 8,955 ft, reaching planned casing point in the 12 1/4\" section. Rate of penetration averaged 13.2 ft/hr. Circulated hole clean and conditioned mud prior to running casing.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 11.1 ppg, increased from prior day to manage anticipated pore pressure at casing point.\nFunnel viscosity: 45 sec/qt.\nChlorides: 19,200 mg/L.\nSolids content: 6.8%.\n\nNo non-productive time recorded during this reporting period.\n\nPre-job safety meeting held prior to casing running operations. No incidents or near-misses reported.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller, 3-person casing crew mobilized for tomorrow's run.\n\nRun 9 5/8\" casing to 8,955 ft, cement casing string, and perform pressure test prior to drilling out.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day13.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.9994660019874573
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md::0",
+        "fused_score": 0.03200204813108039,
+        "text": "Well: Falcon-1\nReport Date: Day 12\nOperator: Northbrook Energy\nRig: Rig 214\nReport prepared by: J. Alvarez, Company Man\n\nDrilling continued in the 12 1/4\" hole section from 8,410 ft to 8,690 ft over the 24-hour reporting period. Rate of penetration averaged 11.7 ft/hr. Circulated bottoms up twice for hole cleaning before continuing to drill ahead. No connections gas observed above background.\n\nMud type: Water-based, KCl-polymer system.\nMud weight: 10.8 ppg.\nFunnel viscosity: 42 sec/qt.\nChlorides: 18,500 mg/L.\nSolids content: 6.2%.\n\n2.5 hours non-productive time recorded due to a top drive hydraulic leak. Maintenance crew replaced a hydraulic hose fitting; operations resumed at 04:30.\n\nOne near-miss reported: a pipe wrench left on the rig floor walkway during a connection. Item removed immediately, toolbox talk held with floor crew on housekeeping standards. No lost-time incidents.\n\n14 rig crew, 2 mud engineers, 1 company man, 1 directional driller.\n\nContinue drilling ahead to planned casing point at approximately 8,950 ft. Run wiper trip if hole conditions deteriorate.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_falcon1_day12.md",
+        "header_path": "Daily Drilling Report -- Falcon-1 > Report Info",
+        "rerank_score": 0.6373522877693176
+      }
+    ]
+  },
+  {
+    "user_input": "How does the on_click method handle rapid repeated clicks in Widget Framework?",
+    "reference": "The documentation does not describe any special handling for rapid repeated clicks. It only shows on_click incrementing a counter and calling self.rerender(); a debounce_ms setting exists for widget configuration, but no click-specific debouncing behavior is documented.",
+    "retrieved_chunks": [
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/sample.md::0",
+        "fused_score": 0.03278688524590164,
+        "text": "Widget Framework is a lightweight tool for building reactive UI components without a build step.\n\nInstall via pip.\n\nYou need Python 3.9 or later, and a modern browser for the dev server.\n\nRun `pip install widgetframework` in your terminal. Then verify the install by running `widgetframework --version`.\n\nHere is a minimal example showing how to create a widget.\n\n```python\nfrom widgetframework import Widget\n\nclass Counter(Widget):\n    def __init__(self):\n        self.count = 0\n\ndef render(self):\n        return f\"<button>{self.count}</button>\"\n\ndef on_click(self):\n        self.count += 1\n        self.rerender()\n```\n\nWidgets can be configured with a settings dict passed at construction time. Supported keys include `theme`, `debounce_ms`, and `lazy_render`. Setting `lazy_render` to True defers the initial render until the widget enters the viewport, which is useful for long pages with many widgets.\n\nIf the dev server fails to start, check that port 8080 is free. If widgets fail to rerender, ensure you are calling `self.rerender()` and not mutating state directly without triggering a rerender.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/sample.md",
+        "header_path": "Widget Framework",
+        "rerank_score": 0.46643221378326416
+      },
+      {
+        "chunk_id": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md::0",
+        "fused_score": 0.03076923076923077,
+        "text": "Well: Condor-7\nReport Date: Day 4\nOperator: Meridian Resources\nRig: Rig 88\nReport prepared by: T. Okafor, Company Man\n\nDrilled surface hole section from 620 ft to 1,340 ft using 17 1/2\" bit. Rate of penetration averaged 24.6 ft/hr through unconsolidated formation. Hole conditions stable, no losses observed.\n\nMud type: Spud mud, bentonite-based.\nMud weight: 9.2 ppg.\nFunnel viscosity: 38 sec/qt.\nSand content: 1.1%.\n\n1.0 hour non-productive time due to a delayed mud delivery from the supply base. Operations otherwise continuous.\n\nRoutine safety inspection of surface equipment completed. All permits current. No incidents reported.\n\n12 rig crew, 1 mud engineer, 1 company man.\n\nContinue drilling surface hole to planned setting depth of 1,500 ft, then run and cement surface casing.",
+        "source": "/home/alphi/rag-portfolio/sample_docs/ddr_condor7_day04.md",
+        "header_path": "Daily Drilling Report -- Condor-7 > Report Info",
+        "rerank_score": 3.7446061469381675e-05
+      }
+    ]
+  }
+]

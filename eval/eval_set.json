@@ -1,0 +1,42 @@
+[
+  {
+    "user_input": "What was the mud weight on Condor-7 on Day 4?",
+    "reference": "9.2 ppg."
+  },
+  {
+    "user_input": "What was the average rate of penetration on Falcon-1 Day 12?",
+    "reference": "11.7 ft/hr."
+  },
+  {
+    "user_input": "Was anyone injured on Condor-7?",
+    "reference": "Yes, on Day 5 a crew member sustained a minor hand laceration while handling casing tongs; treated on site, no further medical attention required."
+  },
+  {
+    "user_input": "Was anyone injured on Falcon-1?",
+    "reference": "No injuries. Day 12 had a near-miss (a pipe wrench left on the rig floor walkway during a connection), but no lost-time incidents were reported on either day."
+  },
+  {
+    "user_input": "What was Falcon-1's mud weight on the day it reached casing point?",
+    "reference": "11.1 ppg, on Day 13, increased from the prior day to manage anticipated pore pressure at the casing point."
+  },
+  {
+    "user_input": "Which well experienced downtime due to a cementing unit delay?",
+    "reference": "Condor-7, on Day 5 -- 3.5 hours of NPT waiting on the cement unit, which arrived late due to a mechanical breakdown en route."
+  },
+  {
+    "user_input": "What safety incident occurred on Falcon-1 Day 12?",
+    "reference": "A near-miss: a pipe wrench was left on the rig floor walkway during a connection. It was removed immediately and a toolbox talk was held with the floor crew on housekeeping standards. No lost-time incidents."
+  },
+  {
+    "user_input": "What was Falcon-1's mud weight on Day 13, and why was it increased?",
+    "reference": "11.1 ppg, increased from the prior day to manage anticipated pore pressure at the casing point."
+  },
+  {
+    "user_input": "What was Falcon-1's mud weight on Day 13, and why was it increased?",
+    "reference": "11.1 ppg, increased from the prior day to manage anticipated pore pressure at the casing point."
+  },
+  {
+    "user_input": "How does the on_click method handle rapid repeated clicks in Widget Framework?",
+    "reference": "The documentation does not describe any special handling for rapid repeated clicks. It only shows on_click incrementing a counter and calling self.rerender(); a debounce_ms setting exists for widget configuration, but no click-specific debouncing behavior is documented."
+  }
+]

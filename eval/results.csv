@@ -1,0 +1,11 @@
+user_input,response,faithfulness,answer_relevancy,llm_context_precision_without_reference,context_recall
+What was the mud weight on Condor-7 on Day 4?,The mud weight on Condor-7 was 9.2 ppg on Day 4 [1].,0.5,0.9999999999999998,0.9999999999,1.0
+What was the average rate of penetration on Falcon-1 Day 12?,The average rate of penetration on Day 12 was 11.7 ft/hr [1].,0.5,0.9418419955144401,0.9999999999,1.0
+Was anyone injured on Condor-7?,"Yes, a crew member sustained a minor hand laceration while handling casing tongs [1].",1.0,0.8428033592144378,0.9999999999,1.0
+Was anyone injured on Falcon-1?,No injuries were reported in the context provided.,1.0,0.8503520542334044,0.99999999995,1.0
+What was Falcon-1's mud weight on the day it reached casing point?,Falcon-1's mud weight increased to 11.1 ppg on the day it reached casing point [1].,1.0,0.9954213315949297,0.9999999999,1.0
+Which well experienced downtime due to a cementing unit delay?,The well that experienced downtime due to a cementing unit delay was Condor-7 [1].,1.0,0.9999999999999998,0.9999999999,1.0
+What safety incident occurred on Falcon-1 Day 12?,A pipe wrench was left on the rig floor walkway during a connection [1].,1.0,0.7928893904404126,0.9999999999,1.0
+"What was Falcon-1's mud weight on Day 13, and why was it increased?","On Day 13, Falcon-1's mud weight was 11.1 ppg. It was increased from prior day to manage anticipated pore pressure at the casing point [1].",1.0,0.994896792379158,0.9999999999,1.0
+"What was Falcon-1's mud weight on Day 13, and why was it increased?","On Day 13, Falcon-1's mud weight was 11.1 ppg. It was increased from prior day to manage anticipated pore pressure at the casing point [1].",1.0,0.994896792379158,0.9999999999,1.0
+How does the on_click method handle rapid repeated clicks in Widget Framework?,The `on_click` method in the `Counter` widget class increments the `count` attribute by 1 and then calls `self.rerender()` to update the widget's UI [1]. This ensures that the widget's render function is executed again to reflect the new count value [1].,1.0,0.9319805370535804,0.9999999999,1.0
