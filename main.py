@@ -24,6 +24,12 @@ def ask(question: str) -> None:
     print(result["answer"])
     print("\n=== Sources ===")
     print(format_sources(result["chunks"]))
+    status = result["citations"]["status"]
+    if status == "no_citations":
+        print("\n[warning] the answer has no [n] citations, so it is not verified against the sources.")
+    elif status == "invalid":
+        print(f"\n[warning] the answer cites sources that do not exist: {result['citations']['invalid']}")
+    print("\nTiming (ms): " + " | ".join(f"{name} {ms:.0f}" for name, ms in result["timings"].items()))
     print()
 
 

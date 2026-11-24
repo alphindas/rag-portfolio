@@ -18,6 +18,8 @@ from retrieve.hybrid import hybrid_search  # also puts ingest/ on sys.path
 import retrieve.rerank as rerank_module
 import embed as embed_module  # the same module object hybrid.py uses
 from generate.answer import generate_answer
+from generate.citations import check_citations
+from observability.tracer import Trace
 
 FINAL_TOP_K = 2  # chunks given to the LLM (same default eval used so far)
 
@@ -35,13 +37,20 @@ def free_gpu_models() -> None:
         pass
 
 
-def run_query(question: str) -> dict:
-    """Returns {"answer": str, "chunks": [chunk dicts with source/header_path/text]}."""
-    candidates = hybrid_search(question)
-    chunks = rerank_module.rerank(question, candidates, top_k=FINAL_TOP_K)
+def run_query(question: str, source: str = "cli") -> dict:
+    """
+    Returns {"answer", "chunks", "citations" (checked in code), "timings" (ms per stage)}.
+    Also appends one line describing the query to logs/traces.jsonl.
+    """
+    trace = Trace(question, source=source)
+    candidates = hybrid_search(question, trace=trace)
+    chunks = rerank_module.rerank(question, candidates, top_k=FINAL_TOP_K, trace=trace)
     free_gpu_models()
-    result = generate_answer(question, chunks)
-    return {"answer": result["answer"], "chunks": chunks}
+    with trace.stage("generate"):
+        result = generate_answer(question, chunks)
+    citations = check_citations(result["answer"], len(chunks))
+    trace.finish(answer=result["answer"], citations=citations)
+    return {"answer": result["answer"], "chunks": chunks, "citations": citations, "timings": trace.timings()}
 
 
 def format_sources(chunks: list[dict]) -> str:

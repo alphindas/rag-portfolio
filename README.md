@@ -4,7 +4,7 @@ A RAG ("ask my documents") system built from scratch in plain Python, with a foc
 
 It answers questions from a small set of drilling-report style documents, cites its sources, and is scored with an automated evaluation pipeline. Everything runs locally except the evaluation judge.
 
-> **Status:** retrieval, reranking, cited generation and evaluation are working. Tracing/latency logging and CI regression gating are in progress (see [Roadmap](#roadmap)).
+> **Status:** retrieval, reranking, cited generation and evaluation are working. Tracing, latency metrics and a code-level citation checker are working; CI regression gating is still to do (see [Roadmap](#roadmap)).
 
 ---
 
@@ -21,13 +21,14 @@ Question -> Hybrid retrieval (BM25 + vectors, fused with RRF)
 
 | Step | File | What it does |
 |---|---|---|
-| Chunking | `ingest/chunk.py` | Splits markdown by headers and paragraphs, then packs into 480-token chunks with 80-token overlap. Keeps a header breadcrumb such as `Installation > Requirements`. |
+| Chunking | `ingest/chunk.py` | Splits markdown by headers and paragraphs, then packs into 480-token chunks with 80-token overlap. Keeps a header breadcrumb such as `Installation > Requirements`, and puts a one-line label (`[Condor-9 \| Day 5 \| Mud Properties]`) at the top of every chunk so a chunk from the middle of a long report still says which report it belongs to. |
 | Embedding | `ingest/embed.py` | Embeds chunks with `BAAI/bge-base-en` and stores them in ChromaDB (cosine). Queries and documents are encoded separately. |
 | Keyword index | `ingest/bm25_index.py` | Builds a BM25 index. Chunk IDs match the vector index so the two result lists can be fused. |
-| Hybrid search | `retrieve/hybrid.py` | Runs BM25 and vector search separately (top 20 each), then fuses with Reciprocal Rank Fusion (k=60). Uses ranks only, because BM25 and cosine scores are not comparable. |
+| Hybrid search | `retrieve/hybrid.py` | Runs BM25 and vector search separately (top 20 each), then fuses with Reciprocal Rank Fusion (k=60). Uses ranks only, because BM25 and cosine scores are not comparable. When the question contains an exact ID or number (`WO-98389`, `10,955`), BM25 gets weight 100 (see the ablation for why it has to be that large). |
 | Reranking | `retrieve/rerank.py` | `BAAI/bge-reranker-base` re-scores the top 10 candidates together with the question and keeps the best. |
 | Pipeline | `pipeline.py`, `main.py` | Chains search, rerank and generation, and frees the embedding model and reranker from GPU memory before the LLM loads. `main.py` is the command-line interface. |
 | Generation | `generate/answer.py` | Sends the chunks to a local Ollama model as numbered context and asks it to cite `[n]` for each claim. |
+| Tracing | `observability/` | `tracer.py` times each stage (bm25, vector, fusion, rerank, generate) and writes one JSON line per query to `logs/traces.jsonl`. `python -m observability.metrics` prints p50/p95 per stage. `generate/citations.py` checks `[n]` citations in code. |
 | Evaluation | `eval/` | Scores answers with RAGAS (see below). |
 
 **Why plain Python?** No LangChain or LlamaIndex for the core pipeline. Every step is written out so it can be read and explained line by line.
@@ -42,9 +43,9 @@ The test corpus is **synthetic**: 40 fictional daily drilling reports (8 wells) 
 
 The eval is a two-step process, because the 4 GB GPU cannot hold the embedding model, the reranker and the LLM at the same time:
 
-1. `eval/run_retrieval.py` runs four setups for every question and saves the ranked chunks to `eval/retrieved.json`: **(a)** BM25 only, **(b)** vector only, **(c)** hybrid RRF, **(d)** hybrid + reranker.
+1. `eval/run_retrieval.py` runs four setups for every question and saves the ranked chunks to `eval/retrieved.json`: **(a)** BM25 only, **(b)** vector only, **(c)** hybrid RRF, **(d)** hybrid + reranker, plus the BM25-weighted versions of (c) and (d).
 2. `eval/ablation.py` computes the free retrieval metrics (hit rate@k, recall@k, MRR) for all four setups, with no LLM, and writes `eval/ablation_results.csv`.
-3. `eval/run_eval.py` generates answers for setups (c) and (d) with k=2 and k=3 chunks (cached in `eval/generated.json`), then scores them with RAGAS, one metric at a time into `eval/results.csv`:
+3. `eval/run_eval.py` generates answers for the two hybrid setups (BM25-weighted, with and without reranker) with k=2 chunks (`--generate-only` stops before any Groq call) (cached in `eval/generated.json`), then scores them with RAGAS, one metric at a time into `eval/results.csv`:
    - **Faithfulness**: is the answer supported by the retrieved text?
    - **Response relevancy**: does the answer address the question?
    - **Context precision**: are the retrieved chunks relevant?
@@ -64,18 +65,22 @@ Results: see `eval/results.csv`.
 
 These are written down on purpose. A project that hides its problems cannot be trusted.
 
-- **Small local model.** The machine has 4 GB of VRAM, so generation uses `llama3.2:3b`. Llama 3.1 8B ran out of memory, and a smaller model (`phi`) hallucinated badly. The 3B model follows citation instructions inconsistently from run to run.
-- **Citation enforcement is only a prompt.** There is no code that checks citations yet, so citation accuracy is measured by the eval and not assumed.
-- **A retrieval setting hid a problem.** With a 5-chunk test corpus and `top_k=5`, every question retrieved the whole corpus, which gave a false-perfect context recall of 1.0 and let the model mix up facts between wells. Lowering `top_k` to 2 fixed the mix-ups. The lesson: a tiny corpus can make retrieval metrics look better than they are.
-- **Misleading section labels.** `header_path` comes from the first block in a chunk, so a citation can name the wrong section when a short document stays in one chunk. Logged, not yet fixed.
-- **Odd faithfulness scores.** Two simple, correct answers scored 0.5 on faithfulness while harder answers scored 1.0. This is suspected to be a quirk in how the judge splits statements, and it has not been confirmed.
-- **Citation instability needs more than one pass.** A repeated question gave identical output in one automated run, which differs from earlier manual runs. One eval pass is not enough to measure this.
-- **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day, and scoring one run (30 questions, 4 metrics) uses about that much. A full RAGAS comparison of four runs takes several days of quota. `eval/run_eval.py` resumes where it stopped.
-- **Chunks lose their context.** In a report that splits in two, the second chunk (mud, downtime, safety) has no well name or day in its text, and the index only sees the text. Questions whose answer sits there are the ones retrieval misses most.
-- **Equal-weight RRF dilutes exact matches.** On keyword questions BM25 alone finds the right chunk every time, but plain hybrid does not (see the ablation).
-- **The model answers "not documented" questions unreliably.** On the unrelated software-doc question it describes behaviour that is not in the documents, in every run.
-- **Falcon-1 injury question.** The model says "no mention of anyone being injured" even when it is given both correct reports (Day 12 and 13). Neither report literally says "no injuries" (they say "no lost-time incidents" and "no incidents or near-misses"), so the reference answer is an inference and the model's answer is arguably literal. Retrieval is not the problem here.
-- **Repeated questions are not stable.** The same question with the same chunks gave identical answers in only one of four runs (the local model samples with a non-zero temperature).
+**Found by the eval and fixed (kept here so the numbers make sense)**
+
+- **Chunks lost their context.** The second chunk of a long report (mud, downtime, safety) had no well name or day, so neither BM25 nor the embeddings could tell which report it came from. Fixed by putting a header on every chunk. Hit@2 for hybrid + reranker went from 0.84 to 0.96.
+- **Plain RRF buried exact-ID matches.** On the 4 keyword questions BM25 alone scored 1.00 but plain hybrid only 0.25. With k=60, neighbouring ranks score almost the same, so a modest BM25 weight (3, 5, even 10) changed nothing; it only worked at 30 and above. The weight is set to 100 for questions containing an exact ID or number: keyword Hit@3 went from 0.50 (with headers) to 1.00. Caveat: only 4 questions, and the rule for "exact ID or number" was written while looking at them.
+- **Nothing told the model to say "I don't know".** With a "Not documented in the provided context." instruction, 4 of 5 unanswerable questions are declined correctly (before: 1 of 5 cleanly). The software-doc question about `on_click` is still answered with invented behaviour, because the 3B model sees related text and fills the gap.
+- **Repeated questions differed between runs.** Ollama now runs at temperature 0 with a fixed seed; the repeated question gave 4 of 4 identical answers.
+
+**Still open**
+
+- **Small local model.** The machine has 4 GB of VRAM, so generation uses `llama3.2:3b`. Llama 3.1 8B ran out of memory, and a smaller model (`phi`) hallucinated badly. The 3B model often leaves the `[n]` citation off short answers; the citation checker flags these (see the eval output and `main.py` warnings).
+- **Falcon-1 injury question is an inference, not a lookup.** Neither report says "no injuries" (Day 12: "no lost-time incidents", Day 13: "no incidents or near-misses"). The model says "no mention of anyone being injured" even when it is given both correct reports. Retrieval finds both chunks, so this is a reading weakness. It has its own category (`inference`) and was not tuned for.
+- **Section labels are approximate.** A chunk's section label comes from its first block, so a chunk that spans several sections names only the first. Some citations name the wrong section.
+- **Latency is mostly model loading.** To fit in 4 GB the embedder and reranker are dropped before the LLM loads, so every question reloads them (about 5-8 s each in the CLI). Warm, retrieval takes under 1 s; generation takes about 8-10 s.
+- **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day, and scoring one run (30 questions, 4 metrics) uses about that much. `eval/run_eval.py` resumes where it stopped.
+- **The eval set is small.** 30 questions (25 with gold chunks): one question moves a hit rate by 4 points, so differences under about 8 points are noise.
+- **Synthetic data.** The reports are generated from templates, so wording is far more regular than real field reports.
 
 ---
 
@@ -143,10 +148,12 @@ python -m eval.ablation          # table again, now including RAGAS
 - [x] Cross-encoder reranking
 - [x] Local LLM generation with citations
 - [x] RAGAS evaluation pipeline
-- [ ] Tracing and latency logging (p50 / p95), cost per request
+- [x] Tracing and latency logging (p50 / p95)
 - [ ] GitHub Actions: run the eval on every push and fail on quality regression
-- [ ] Code-level citation checker
-- [ ] Larger corpus and better chunk-level section labels
+- [x] Code-level citation checker
+- [x] Larger, harder synthetic corpus with gold evidence
+- [x] Context headers on chunks, BM25-weighted fusion for exact IDs
+- [ ] Better chunk-level section labels
 
 ---
 

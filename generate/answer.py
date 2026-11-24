@@ -110,6 +110,8 @@ Question: {query}
 
 Answer the question using only the context above.
 
+If the context does not contain the answer, reply exactly: "Not documented in the provided context." Do not guess and do not use outside knowledge.
+
 Citation rule: every sentence that uses information from the context MUST end with a citation like [1]. There is no such thing as "no citation needed" -- if a sentence states a fact from the context, it gets a number. If a sentence is pure connecting language with no factual content (e.g. "Here's how:"), it can skip the citation, but any code, step, or claim must be cited.
 
 Example of correct style:
@@ -122,6 +124,8 @@ Example of correct style:
             {"role": "user", "content": user_prompt},
         ],
         options={
+            "temperature": 0,  # same prompt -> same answer (repeatable evals)
+            "seed": 0,
             "num_predict": 512,
             "num_ctx": 1024,  # reduced from 2048 -- our prompts (5 short DDR
                                # chunks + question) are nowhere near that size,

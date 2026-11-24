@@ -203,10 +203,12 @@ def build_questions(R):
     add("similar_wells", "Was anyone injured on Condor-7?",
         "Yes, on Day 5 a crew member sustained a minor hand laceration while handling casing tongs; treated on site, no further medical attention required.",
         [ev(c7d5, "minor hand laceration")])
-    add("similar_wells", "Was anyone injured on Falcon-1?",
-        "No injuries. Day 12 had a near-miss (a pipe wrench left on the rig floor walkway during a connection), but no lost-time incidents were reported on either day.",
+    # Neither Falcon-1 report says "no injuries": Day 12 says "No lost-time incidents" and
+    # Day 13 says "No incidents or near-misses reported". Answering needs a small inference.
+    add("inference", "Was anyone injured on Falcon-1?",
+        "The reports do not state injuries either way, and never use the words \"no injuries\". Day 12 records one near-miss (a pipe wrench left on the rig floor walkway) and no lost-time incidents; Day 13 records no incidents or near-misses. So no injury is recorded.",
         [ev(f1d12, "No lost-time incidents."), ev(f1d13, "No incidents or near-misses reported.")],
-        watch=True)  # known tricky: no document literally says "no injuries"
+        watch=True)
     add("single_fact", "What was Falcon-1's mud weight on the day it reached casing point?",
         "11.1 ppg, on Day 13, increased from the prior day to manage anticipated pore pressure at the casing point.",
         [ev(f1d13, "Mud weight: 11.1 ppg")])

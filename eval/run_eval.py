@@ -41,10 +41,12 @@ from ragas.metrics import (
 from ragas.run_config import RunConfig
 
 from generate.answer import generate_answer
+from generate.citations import check_citations
+from observability.tracer import Trace
 
 GENERATED_PATH = "eval/generated.json"
 RESULTS_PATH = "eval/results.csv"
-DEFAULT_RUNS = ["hybrid@2", "hybrid@3", "hybrid_rerank@2", "hybrid_rerank@3"]
+DEFAULT_RUNS = ["hybrid_weighted@2", "hybrid_weighted_rerank@2"]  # k=2 only: Groq free-tier quota
 
 METRICS = {
     "faithfulness": Faithfulness,
@@ -86,7 +88,11 @@ def generate_for_run(retrieved: list[dict], run: str, generated: dict) -> dict:
         if q["id"] in answers:
             continue
         print(f"[{run}] [{i}/{len(retrieved)}] generating: {q['user_input']}")
-        result = generate_with_retry(q["user_input"], chunks_for_run(q, run))
+        chunks = chunks_for_run(q, run)
+        trace = Trace(q["user_input"], source="eval_generation", run=run, question_id=q["id"])
+        with trace.stage("generate"):
+            result = generate_with_retry(q["user_input"], chunks)
+        trace.finish(answer=result["answer"], citations=check_citations(result["answer"], len(chunks)))
         answers[q["id"]] = {"answer": result["answer"]}
         with open(GENERATED_PATH, "w") as f:  # save as we go
             json.dump(generated, f, indent=2)
@@ -130,7 +136,10 @@ def set_scores(results: pd.DataFrame, run: str, retrieved: list[dict], answers: 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", default=",".join(DEFAULT_RUNS), help="comma-separated, e.g. hybrid@2,hybrid_rerank@3")
-    runs = parser.parse_args().runs.split(",")
+    parser.add_argument("--generate-only", action="store_true",
+                        help="only generate answers with the local LLM; no Groq calls, no RAGAS scoring")
+    args = parser.parse_args()
+    runs = args.runs.split(",")
 
     import subprocess
     print("[gpu check before anything else]")
@@ -143,6 +152,10 @@ def main():
     # Generate everything first (local, no quota), then spend Groq quota.
     for run in runs:
         generate_for_run(retrieved, run, generated)
+
+    if args.generate_only:
+        print("Answers saved to eval/generated.json. Skipping RAGAS (--generate-only).")
+        return
 
     evaluator_llm = get_evaluator_llm()
     evaluator_embeddings = get_evaluator_embeddings()

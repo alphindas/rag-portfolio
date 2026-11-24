@@ -12,7 +12,7 @@ import bm25_index
 import chunk
 import embed
 from chunk import chunk_document
-from retrieve.hybrid import _rrf_fuse
+from retrieve.hybrid import _rrf_fuse, has_exact_token
 
 SAMPLE_DOC = Path(__file__).resolve().parent.parent / "sample_docs" / "ddr_condor7_day04.md"
 
@@ -66,3 +66,19 @@ def test_rrf_fusion_order():
     assert ids[:2] == ["b", "a"]
     assert set(ids[2:]) == {"c", "d"}
     assert fused[0][1] == pytest.approx(1 / 62 + 1 / 61)  # k=60: b is rank 2 and rank 1
+
+
+def test_weighted_rrf_lets_bm25_win_on_exact_queries():
+    bm25 = [("target", 9.0), ("other", 5.0)]
+    vector = [("other", 0.9), ("noise", 0.8)]
+    plain = [cid for cid, _ in _rrf_fuse([bm25, vector])]
+    weighted = [cid for cid, _ in _rrf_fuse([bm25, vector], weights=[100.0, 1.0])]
+    assert plain[0] == "other"      # in both lists, so equal weights prefer it
+    assert weighted[0] == "target"  # BM25's #1 wins when BM25 counts for more
+
+
+def test_exact_token_detection():
+    for q in ["work order WO-98389?", "bit serial number BS-85748", "chlorides of 19,200 mg/L", "depth of 10,955 ft"]:
+        assert has_exact_token(q), q
+    for q in ["mud weight on Condor-9 on Day 4", "Falcon-1 Day 12 near Rig 88", "pressure of 9.2 ppg"]:
+        assert not has_exact_token(q), q

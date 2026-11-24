@@ -46,9 +46,9 @@
   },
   {
     "id": "q04",
-    "category": "similar_wells",
+    "category": "inference",
     "user_input": "Was anyone injured on Falcon-1?",
-    "reference": "No injuries. Day 12 had a near-miss (a pipe wrench left on the rig floor walkway during a connection), but no lost-time incidents were reported on either day.",
+    "reference": "The reports do not state injuries either way, and never use the words \"no injuries\". Day 12 records one near-miss (a pipe wrench left on the rig floor walkway) and no lost-time incidents; Day 13 records no incidents or near-misses. So no injury is recorded.",
     "gold_docs": [
       "ddr_falcon1_day12.md",
       "ddr_falcon1_day13.md"

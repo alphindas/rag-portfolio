@@ -254,6 +254,29 @@ def pack_blocks(blocks: list[Block]) -> list[Block]:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+_WELL_RE = re.compile(r"^Well:\s*(.+)$", re.MULTILINE)
+_DATE_RE = re.compile(r"^Report Date:\s*(.+)$", re.MULTILINE)
+_TITLE_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+
+
+def context_header(doc_text: str, header_path: str) -> str:
+    """
+    A one-line label put at the top of every chunk, e.g.
+        [Condor-9 | Day 5 | Mud Properties]
+    Without it, the second chunk of a long report (mud, downtime, safety)
+    contains no well name or day, so neither BM25 nor the embedding model can
+    tell WHICH report it belongs to. Documents with no "Well:" line (like the
+    widget doc) fall back to their title.
+    """
+    section = header_path.split(" > ")[-1] if header_path else ""
+    well, date, title = _WELL_RE.search(doc_text), _DATE_RE.search(doc_text), _TITLE_RE.search(doc_text)
+    if well:
+        label = [well.group(1).strip()] + ([date.group(1).strip()] if date else [])
+    else:
+        label = [title.group(1).strip()] if title else []
+    return "[" + " | ".join(label + ([section] if section else [])) + "]"
+
+
 def chunk_document(filepath: str) -> list[dict]:
     """
     Read a markdown file and return a list of chunk dicts, ready to be
@@ -277,13 +300,17 @@ def chunk_document(filepath: str) -> list[dict]:
 
     chunks = []
     for i, block in enumerate(packed):
+        # Header goes INTO the chunk text, so embedding, BM25, the reranker
+        # and the LLM all see it. (+~15 tokens, inside the 32-token headroom
+        # below BGE's 512 limit.)
+        full_text = context_header(text, block.header_path) + "\n" + block.text
         chunks.append(
             {
-                "text": block.text,
+                "text": full_text,
                 "source": normalized_source,
                 "chunk_index": i,
                 "header_path": block.header_path,
-                "token_count": count_tokens(block.text),
+                "token_count": count_tokens(full_text),
             }
         )
     return chunks

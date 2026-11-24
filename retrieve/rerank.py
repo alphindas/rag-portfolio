@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from sentence_transformers import CrossEncoder
 
+from observability.tracer import NULL_TRACE
+
 RERANKER_MODEL_NAME = "BAAI/bge-reranker-base"
 
 _reranker: CrossEncoder | None = None
@@ -48,7 +50,7 @@ def _get_reranker() -> CrossEncoder:
     return _reranker
 
 
-def rerank(query: str, candidates: list[dict], top_k: int = 2) -> list[dict]:
+def rerank(query: str, candidates: list[dict], top_k: int = 2, trace=NULL_TRACE) -> list[dict]:
     """
     Takes the list of dicts returned by hybrid_search() (each with at
     least "text"), scores each against the query with the cross-encoder,
@@ -60,17 +62,19 @@ def rerank(query: str, candidates: list[dict], top_k: int = 2) -> list[dict]:
     if not candidates:
         return []
 
-    model = _get_reranker()
+    with trace.stage("rerank") as st:
+        model = _get_reranker()
 
-    # CrossEncoder expects a list of [query, passage] pairs -- one pair
-    # per candidate, scored independently but batched for efficiency.
-    pairs = [[query, c["text"]] for c in candidates]
-    scores = model.predict(pairs)
+        # CrossEncoder expects a list of [query, passage] pairs -- one pair
+        # per candidate, scored independently but batched for efficiency.
+        pairs = [[query, c["text"]] for c in candidates]
+        scores = model.predict(pairs)
 
-    for candidate, score in zip(candidates, scores):
-        candidate["rerank_score"] = float(score)
+        for candidate, score in zip(candidates, scores):
+            candidate["rerank_score"] = float(score)
 
-    reranked = sorted(candidates, key=lambda c: c["rerank_score"], reverse=True)
+        reranked = sorted(candidates, key=lambda c: c["rerank_score"], reverse=True)
+        st.record(reranked)
     return reranked[:top_k]
 
 

@@ -30,17 +30,34 @@ is the well-established starting point, not a magic number.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "ingest"))
+sys.path.insert(0, str(Path(__file__).parent.parent))  # for observability/
 
 from bm25_index import load_bm25_index, search_bm25, get_corpus  # noqa: E402
 from embed import embed_query, get_chroma_collection  # noqa: E402
+from observability.tracer import NULL_TRACE  # noqa: E402
 
 RRF_K = 60
 CANDIDATES_PER_RETRIEVER = 20  # how many each retriever returns before fusion
 FUSED_TOP_K = 10               # how many fused results to hand to reranker later
+# BM25's RRF weight when the question has an exact ID/number. It must be big:
+# with k=60 neighbouring ranks score almost the same (1/61 vs 1/62), so a chunk
+# BM25 ranks 2nd that the vector list also contains beats BM25's 1st unless
+# w > ~62. At 100, BM25's ordering decides and the vector list fills the rest.
+BM25_EXACT_WEIGHT = 100.0
+
+# Exact IDs or numbers: "WO-98389", "BS-12345", "10,955", "19200". Not matched:
+# "Day 12", "Condor-9", "Rig 88" (names and small numbers that embeddings
+# handle fine). Embeddings are weak at exact digits; BM25 matches them exactly.
+_EXACT_RE = re.compile(r"\b[A-Za-z]{1,4}-\d{4,}\b|\b\d{1,3}(?:,\d{3})+\b|\b\d{4,}\b")
+
+
+def has_exact_token(query: str) -> bool:
+    return bool(_EXACT_RE.search(query))
 
 
 def _vector_search(query: str, top_k: int) -> list[tuple[str, float]]:
@@ -67,44 +84,59 @@ def _vector_search(query: str, top_k: int) -> list[tuple[str, float]]:
 
 
 def _rrf_fuse(
-    ranked_lists: list[list[tuple[str, float]]], k: int = RRF_K
+    ranked_lists: list[list[tuple[str, float]]], k: int = RRF_K, weights: list[float] | None = None
 ) -> list[tuple[str, float]]:
     """
     Takes multiple ranked lists of (chunk_id, score) -- score is
     ignored, only position within each list matters -- and returns one
-    list of (chunk_id, fused_score), sorted descending.
+    list of (chunk_id, fused_score), sorted descending. Optional weights
+    (one per list) make one retriever count for more; default is equal.
     """
     fused_scores: dict[str, float] = {}
+    weights = weights or [1.0] * len(ranked_lists)
 
-    for ranked_list in ranked_lists:
+    for weight, ranked_list in zip(weights, ranked_lists):
         for rank, (chunk_id, _score) in enumerate(ranked_list, start=1):
             fused_scores.setdefault(chunk_id, 0.0)
-            fused_scores[chunk_id] += 1.0 / (k + rank)
+            fused_scores[chunk_id] += weight / (k + rank)
 
     return sorted(fused_scores.items(), key=lambda pair: pair[1], reverse=True)
 
 
-def hybrid_search(query: str, top_k: int = FUSED_TOP_K, mode: str = "hybrid") -> list[dict]:
+def hybrid_search(query: str, top_k: int = FUSED_TOP_K, mode: str = "hybrid_weighted", trace=NULL_TRACE) -> list[dict]:
     """
     Runs BM25 + vector search independently, fuses via RRF, and returns
     the top_k fused results enriched with text + metadata. Enrichment
     pulls from the BM25 corpus (already keyed by chunk_id with text,
     source, header_path) rather than round-tripping to Chroma again.
 
-    mode is only for the ablation study: "bm25" or "vector" runs just one
-    retriever (RRF over a single list keeps its order), "hybrid" is the
-    real pipeline.
+    Default mode is "hybrid_weighted" (identical to plain "hybrid" unless the
+    question contains an exact ID or number). The other modes exist for the
+    ablation study: "bm25" or "vector" runs just one
+    retriever (RRF over a single list keeps its order), "hybrid" is plain
+    equal-weight RRF, "hybrid_weighted" gives BM25 a higher weight when the
+    question contains an exact ID or number.
     """
     ranked_lists = []
-    if mode in ("bm25", "hybrid"):
-        bm25_bundle = load_bm25_index()
-        ranked_lists.append(search_bm25(query, bm25_bundle, top_k=CANDIDATES_PER_RETRIEVER))
-    if mode in ("vector", "hybrid"):
-        ranked_lists.append(_vector_search(query, top_k=CANDIDATES_PER_RETRIEVER))
+    hybrid_like = mode in ("hybrid", "hybrid_weighted")
+    if mode == "bm25" or hybrid_like:
+        with trace.stage("bm25") as st:
+            bm25_bundle = load_bm25_index()
+            bm25_results = search_bm25(query, bm25_bundle, top_k=CANDIDATES_PER_RETRIEVER)
+            st.record(bm25_results)
+        ranked_lists.append(bm25_results)
+    if mode == "vector" or hybrid_like:
+        with trace.stage("vector") as st:
+            vector_results = _vector_search(query, top_k=CANDIDATES_PER_RETRIEVER)
+            st.record(vector_results)
+        ranked_lists.append(vector_results)
     if not ranked_lists:
         raise ValueError(f"unknown mode {mode!r}")
 
-    fused = _rrf_fuse(ranked_lists)[:top_k]
+    with trace.stage("fusion") as st:
+        weights = [BM25_EXACT_WEIGHT, 1.0] if mode == "hybrid_weighted" and has_exact_token(query) else None
+        fused = _rrf_fuse(ranked_lists, weights=weights)[:top_k]
+        st.record(fused)
 
     corpus = get_corpus()  # {chunk_id: {"text", "source", "header_path", ...}}
 

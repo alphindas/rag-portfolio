@@ -7,6 +7,9 @@ saves the ranked chunks to eval/retrieved.json, then exits.
     (b) vector         BGE embeddings only
     (c) hybrid         BM25 + vector fused with RRF
     (d) hybrid_rerank  (c), then the cross-encoder reranker re-orders the top 10
+  plus two variants where BM25 gets a higher RRF weight for questions that
+  contain an exact ID or number:
+    hybrid_weighted, hybrid_weighted_rerank
 
 Why a separate process from run_eval.py? A live process keeps GPU memory
 even after models are "freed". Retrieval loads the embedder + reranker
@@ -19,6 +22,7 @@ Run from the project root, after `python ingest/build_index.py`:
 import json
 
 from eval.retrieval_metrics import gold_chunk_sets
+from observability.tracer import Trace
 from retrieve.hybrid import hybrid_search
 from retrieve.rerank import rerank
 
@@ -37,13 +41,18 @@ def main():
         text = q["user_input"]
         print(f"[{i}/{len(questions)}] retrieving: {text}")
         hybrid = hybrid_search(text, top_k=RETRIEVE_K, mode="hybrid")
+        trace = Trace(text, source="eval_retrieval", question_id=q["id"])  # times the default pipeline path
+        weighted = hybrid_search(text, top_k=RETRIEVE_K, mode="hybrid_weighted", trace=trace)
         rankings = {
             "bm25": hybrid_search(text, top_k=RETRIEVE_K, mode="bm25"),
             "vector": hybrid_search(text, top_k=RETRIEVE_K, mode="vector"),
             "hybrid": hybrid,
             # rerank() adds scores to the dicts it gets, so give it copies
             "hybrid_rerank": rerank(text, [dict(c) for c in hybrid], top_k=RETRIEVE_K),
+            "hybrid_weighted": weighted,
+            "hybrid_weighted_rerank": rerank(text, [dict(c) for c in weighted], top_k=RETRIEVE_K, trace=trace),
         }
+        trace.finish()
         gold = gold_chunk_sets(q["evidence"], corpus)
         if any(not g for g in gold):  # evidence phrase not found in any chunk
             raise SystemExit(f"{q['id']}: gold evidence not found in the index. "
