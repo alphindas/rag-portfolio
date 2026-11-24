@@ -117,7 +117,7 @@ Example of correct style:
 """
 
     response = ollama.chat(
-        model="llama3.2:3b",
+        model=OLLAMA_MODEL,
         messages=[
             {"role": "user", "content": user_prompt},
         ],

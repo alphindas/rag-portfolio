@@ -26,6 +26,7 @@ Question -> Hybrid retrieval (BM25 + vectors, fused with RRF)
 | Keyword index | `ingest/bm25_index.py` | Builds a BM25 index. Chunk IDs match the vector index so the two result lists can be fused. |
 | Hybrid search | `retrieve/hybrid.py` | Runs BM25 and vector search separately (top 20 each), then fuses with Reciprocal Rank Fusion (k=60). Uses ranks only, because BM25 and cosine scores are not comparable. |
 | Reranking | `retrieve/rerank.py` | `BAAI/bge-reranker-base` re-scores the top 10 candidates together with the question and keeps the best. |
+| Pipeline | `pipeline.py`, `main.py` | Chains search, rerank and generation, and frees the embedding model and reranker from GPU memory before the LLM loads. `main.py` is the command-line interface. |
 | Generation | `generate/answer.py` | Sends the chunks to a local Ollama model as numbered context and asks it to cite `[n]` for each claim. |
 | Evaluation | `eval/` | Scores answers with RAGAS (see below). |
 
@@ -96,19 +97,25 @@ For evaluation, create a `.env` file with your free Groq API key:
 GROQ_API_KEY=your_key_here
 ```
 
-Build the indexes, then ask a question:
+Build the indexes (reads every `.md` file in `sample_docs/`), then ask a question:
 
 ```bash
-python ingest/embed.py
-python ingest/bm25_index.py
-python main.py
+python ingest/build_index.py
+python main.py                                   # interactive
+python main.py --question "What was the mud weight on Condor-7 on Day 4?"
 ```
 
-Run the evaluation:
+Run the tests (no GPU, Ollama or API key needed):
 
 ```bash
-python eval/run_retrieval.py
-python eval/run_eval.py
+pytest
+```
+
+Run the evaluation (run from the repo root):
+
+```bash
+python -m eval.run_retrieval
+python -m eval.run_eval
 ```
 
 ---

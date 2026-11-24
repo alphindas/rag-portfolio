@@ -6,3 +6,5 @@ __pycache__/
 chroma_db/
 bm25_index/
 .ipynb_checkpoints/
+*.log
+logs/

@@ -44,7 +44,8 @@ from pathlib import Path
 
 from rank_bm25 import BM25Okapi
 
-BM25_PERSIST_DIR = Path("./bm25_index")
+# Anchored to the repo root (see CHROMA_PERSIST_DIR in embed.py).
+BM25_PERSIST_DIR = Path(__file__).resolve().parent.parent / "bm25_index"
 BM25_STORE_PATH = BM25_PERSIST_DIR / "bm25_store.pkl"
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")

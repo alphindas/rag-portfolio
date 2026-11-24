@@ -49,6 +49,8 @@ from pathlib import Path
 
 from transformers import AutoTokenizer
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -259,12 +261,16 @@ def chunk_document(filepath: str) -> list[dict]:
     """
     text = Path(filepath).read_text(encoding="utf-8")
 
-    # Resolve to an absolute, canonical path BEFORE it becomes part of
-    # source (and therefore part of the chunk_id in embed.py / bm25_index.py).
-    # Without this, the same physical file gets a different source string
-    # depending on the caller CWD and how the path was typed, which would
-    # silently break RRF fusion in hybrid.py.
-    normalized_source = str(Path(filepath).resolve())
+    # Store the source as a path relative to the repo root (e.g.
+    # "sample_docs/ddr_condor7_day04.md"), so chunk IDs are the same on
+    # every machine and no matter which folder the script is run from.
+    # This ID is shared by embed.py and bm25_index.py -- if they ever
+    # disagree, RRF fusion in hybrid.py silently breaks.
+    resolved = Path(filepath).resolve()
+    try:
+        normalized_source = resolved.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:  # file lives outside the repo: fall back to absolute
+        normalized_source = resolved.as_posix()
 
     blocks = parse_markdown_blocks(text)
     packed = pack_blocks(blocks)
