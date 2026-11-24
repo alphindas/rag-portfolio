@@ -43,15 +43,6 @@ import ollama
 
 OLLAMA_MODEL = "llama3.2:3b"
 
-SYSTEM_PROMPT = """You are a precise assistant that answers questions using ONLY the provided context chunks.
-
-Rules:
-- Every factual claim in your answer MUST be followed by a citation marker like [1], [2], etc., referring to the numbered context chunk it came from.
-- If a claim draws on multiple chunks, cite all of them, e.g. [1][2].
-- If the context does not contain enough information to answer, say so plainly instead of guessing.
-- Do not invent information that isn't in the provided context.
-- Keep the answer concise and directly responsive to the question."""
-
 
 def _build_context_block(chunks: list[dict]) -> str:
     """
