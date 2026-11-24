@@ -1,43 +1,57 @@
 # eval/run_retrieval.py
 """
-Phase 1: runs hybrid_search + rerank for every question in eval_set.json
-and writes results to retrieved.json, then exits.
+Step 1 of the eval: runs all four retrieval setups for every question and
+saves the ranked chunks to eval/retrieved.json, then exits.
 
-Why a separate process instead of doing this inline in run_eval.py?
-In-process cleanup (nulling model refs + gc.collect() + empty_cache())
-still left generation OOMing even with ~2.2GB reported free -- a live
-process's CUDA context and allocator fragmentation don't fully release
-until the process actually exits. So retrieval runs to completion here,
-this process exits, and generation runs afterward in a clean process
-with the full card available.
+    (a) bm25           BM25 keyword search only
+    (b) vector         BGE embeddings only
+    (c) hybrid         BM25 + vector fused with RRF
+    (d) hybrid_rerank  (c), then the cross-encoder reranker re-orders the top 10
 
-Run from the project root:
-    python3 -m eval.run_retrieval
+Why a separate process from run_eval.py? A live process keeps GPU memory
+even after models are "freed". Retrieval loads the embedder + reranker
+(~1.5 GB), this process exits, and generation then runs with the whole 4 GB
+card free for the LLM.
+
+Run from the project root, after `python ingest/build_index.py`:
+    python -m eval.run_retrieval
 """
 import json
 
+from eval.retrieval_metrics import gold_chunk_sets
 from retrieve.hybrid import hybrid_search
 from retrieve.rerank import rerank
+
+import bm25_index  # on sys.path thanks to retrieve.hybrid
+
+RETRIEVE_K = 10  # chunks kept per setup; hit rate / MRR are computed on these
 
 
 def main():
     with open("eval/eval_set.json", "r") as f:
         questions = json.load(f)
+    corpus = bm25_index.get_corpus()
 
     results = []
     for i, q in enumerate(questions, start=1):
-        print(f"[{i}/{len(questions)}] retrieving: {q['user_input']}")
-        top10 = hybrid_search(q["user_input"])
-        top5 = rerank(q["user_input"], top10)
-        results.append({
-            "user_input": q["user_input"],
-            "reference": q["reference"],
-            "retrieved_chunks": top5,
-        })
+        text = q["user_input"]
+        print(f"[{i}/{len(questions)}] retrieving: {text}")
+        hybrid = hybrid_search(text, top_k=RETRIEVE_K, mode="hybrid")
+        rankings = {
+            "bm25": hybrid_search(text, top_k=RETRIEVE_K, mode="bm25"),
+            "vector": hybrid_search(text, top_k=RETRIEVE_K, mode="vector"),
+            "hybrid": hybrid,
+            # rerank() adds scores to the dicts it gets, so give it copies
+            "hybrid_rerank": rerank(text, [dict(c) for c in hybrid], top_k=RETRIEVE_K),
+        }
+        gold = gold_chunk_sets(q["evidence"], corpus)
+        if any(not g for g in gold):  # evidence phrase not found in any chunk
+            raise SystemExit(f"{q['id']}: gold evidence not found in the index. "
+                             "Rebuild it: python ingest/build_index.py")
+        results.append({**q, "gold_chunk_ids": [sorted(g) for g in gold], "rankings": rankings})
 
     with open("eval/retrieved.json", "w") as f:
         json.dump(results, f, indent=2)
-
     print(f"Saved retrieval results for {len(results)} questions to eval/retrieved.json")
 
 

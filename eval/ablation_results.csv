@@ -1,0 +1,9 @@
+setup,k,n_questions,hit_at_k,doc_hit_at_k,recall_at_k,mrr,faithfulness,answer_relevancy,llm_context_precision_without_reference,context_recall,citation_ok_rate
+BM25 only,2,25,0.56,0.56,0.52,0.5603809523809524,,,,,
+BM25 only,3,25,0.68,0.68,0.64,0.5603809523809524,,,,,
+Vector only,2,25,0.6,0.64,0.52,0.6546666666666667,,,,,
+Vector only,3,25,0.72,0.76,0.66,0.6546666666666667,,,,,
+Hybrid (RRF),2,25,0.68,0.68,0.6,0.659047619047619,,,,,
+Hybrid (RRF),3,25,0.72,0.72,0.66,0.659047619047619,,,,,
+Hybrid + reranker,2,25,0.84,0.88,0.78,0.84,0.8062037037037036,0.895464644351323,0.8499999999266666,,
+Hybrid + reranker,3,25,0.84,0.88,0.8,0.84,,,,,

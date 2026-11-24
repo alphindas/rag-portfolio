@@ -84,18 +84,27 @@ def _rrf_fuse(
     return sorted(fused_scores.items(), key=lambda pair: pair[1], reverse=True)
 
 
-def hybrid_search(query: str, top_k: int = FUSED_TOP_K) -> list[dict]:
+def hybrid_search(query: str, top_k: int = FUSED_TOP_K, mode: str = "hybrid") -> list[dict]:
     """
     Runs BM25 + vector search independently, fuses via RRF, and returns
     the top_k fused results enriched with text + metadata. Enrichment
     pulls from the BM25 corpus (already keyed by chunk_id with text,
     source, header_path) rather than round-tripping to Chroma again.
-    """
-    bm25_bundle = load_bm25_index()
-    bm25_results = search_bm25(query, bm25_bundle, top_k=CANDIDATES_PER_RETRIEVER)
-    vector_results = _vector_search(query, top_k=CANDIDATES_PER_RETRIEVER)
 
-    fused = _rrf_fuse([bm25_results, vector_results])[:top_k]
+    mode is only for the ablation study: "bm25" or "vector" runs just one
+    retriever (RRF over a single list keeps its order), "hybrid" is the
+    real pipeline.
+    """
+    ranked_lists = []
+    if mode in ("bm25", "hybrid"):
+        bm25_bundle = load_bm25_index()
+        ranked_lists.append(search_bm25(query, bm25_bundle, top_k=CANDIDATES_PER_RETRIEVER))
+    if mode in ("vector", "hybrid"):
+        ranked_lists.append(_vector_search(query, top_k=CANDIDATES_PER_RETRIEVER))
+    if not ranked_lists:
+        raise ValueError(f"unknown mode {mode!r}")
+
+    fused = _rrf_fuse(ranked_lists)[:top_k]
 
     corpus = get_corpus()  # {chunk_id: {"text", "source", "header_path", ...}}
 

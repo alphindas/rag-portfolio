@@ -1,19 +1,31 @@
 # eval/run_eval.py
 """
-Phase 2: reads eval/retrieved.json (from run_retrieval.py), generates an
-answer for each question (caching to eval/generated.json so a rerun after
-a Groq quota wall doesn't redo local generation), then scores results
-with RAGAS one metric at a time -- saving each metric's scores to
-eval/results.csv as soon as it finishes, so hitting a Groq daily-quota
-wall partway through doesn't lose already-completed metrics. A rerun
-skips any metric already present in results.csv.
+Step 2 of the eval: reads eval/retrieved.json (from run_retrieval.py),
+generates an answer for each question with the local LLM, then scores the
+answers with RAGAS (Groq as judge).
 
-Run AFTER `python3 -m eval.run_retrieval`:
-    python3 -m eval.run_eval
+A "run" is one retrieval setup plus how many chunks (k) go to the LLM, e.g.
+"hybrid_rerank@3". By default we score the four runs the ablation needs:
+hybrid and hybrid+reranker, each with k=2 and k=3. (BM25-only and
+vector-only are compared on the free retrieval metrics only, to save the
+Groq quota.)
+
+Saved incrementally, so hitting a Groq quota wall loses nothing:
+  - eval/generated.json: answers, {run: {question_id: {"answer": ...}}}.
+    A rerun reuses them (local generation is slow).
+  - eval/results.csv: one row per (run, question), one RAGAS metric column
+    at a time. A rerun skips metrics already complete for a run.
+
+Run AFTER `python -m eval.run_retrieval`:
+    python -m eval.run_eval
+    python -m eval.run_eval --runs hybrid_rerank@2     # just one run
 """
+import argparse
 import json
 import os
+import time
 
+import ollama
 import pandas as pd
 
 from eval.ragas_judge import get_evaluator_llm, get_evaluator_embeddings
@@ -32,6 +44,7 @@ from generate.answer import generate_answer
 
 GENERATED_PATH = "eval/generated.json"
 RESULTS_PATH = "eval/results.csv"
+DEFAULT_RUNS = ["hybrid@2", "hybrid@3", "hybrid_rerank@2", "hybrid_rerank@3"]
 
 METRICS = {
     "faithfulness": Faithfulness,
@@ -41,125 +54,132 @@ METRICS = {
 }
 
 
-def load_retrieved(path: str = "eval/retrieved.json") -> list[dict]:
+def load_json(path: str, default):
+    if not os.path.exists(path):
+        return default
     with open(path, "r") as f:
         return json.load(f)
 
 
-def load_or_generate_answers(retrieved: list[dict]) -> list[dict]:
-    """Reuses eval/generated.json if it already has an answer for a given
-    question, so a rerun doesn't redo local generation for work already done."""
-    cached = {}
-    if os.path.exists(GENERATED_PATH):
-        with open(GENERATED_PATH, "r") as f:
-            for item in json.load(f):
-                cached[item["user_input"]] = item
+def chunks_for_run(question: dict, run: str) -> list[dict]:
+    setup, k = run.split("@")
+    return question["rankings"][setup][: int(k)]
 
-    generated = []
-    for i, item in enumerate(retrieved, start=1):
-        if item["user_input"] in cached:
-            print(f"[{i}/{len(retrieved)}] using cached answer: {item['user_input']}")
-            generated.append(cached[item["user_input"]])
+
+def generate_with_retry(question: str, chunks: list[dict], attempts: int = 3) -> dict:
+    """Ollama on a 4 GB laptop GPU occasionally dies with a one-off CUDA error
+    ("device busy or unavailable"). Wait a few seconds and try again."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return generate_answer(question, chunks)
+        except ollama.ResponseError as e:
+            if attempt == attempts:
+                raise
+            print(f"  Ollama error ({str(e)[:80]!r}), retrying in 10s ({attempt}/{attempts})")
+            time.sleep(10)
+
+
+def generate_for_run(retrieved: list[dict], run: str, generated: dict) -> dict:
+    """Fills generated[run][question_id] for any question not answered yet."""
+    answers = generated.setdefault(run, {})
+    for i, q in enumerate(retrieved, start=1):
+        if q["id"] in answers:
             continue
-
-        print(f"[{i}/{len(retrieved)}] generating: {item['user_input']}")
-        chunks = item["retrieved_chunks"]
-        result = generate_answer(item["user_input"], chunks)
-        generated.append({
-            "user_input": item["user_input"],
-            "reference": item["reference"],
-            "retrieved_chunks": chunks,
-            "answer": result["answer"],
-        })
-
-    with open(GENERATED_PATH, "w") as f:
-        json.dump(generated, f, indent=2)
-
-    return generated
+        print(f"[{run}] [{i}/{len(retrieved)}] generating: {q['user_input']}")
+        result = generate_with_retry(q["user_input"], chunks_for_run(q, run))
+        answers[q["id"]] = {"answer": result["answer"]}
+        with open(GENERATED_PATH, "w") as f:  # save as we go
+            json.dump(generated, f, indent=2)
+    return answers
 
 
-def build_dataset(generated: list[dict]) -> EvaluationDataset:
-    samples = []
-    for item in generated:
-        context_texts = [c["text"] for c in item["retrieved_chunks"]]
-        samples.append(SingleTurnSample(
-            user_input=item["user_input"],
-            response=item["answer"],
-            retrieved_contexts=context_texts,
-            reference=item["reference"],
-        ))
-    return EvaluationDataset(samples=samples)
+def build_dataset(retrieved: list[dict], run: str, answers: dict) -> EvaluationDataset:
+    return EvaluationDataset(samples=[
+        SingleTurnSample(
+            user_input=q["user_input"],
+            response=answers[q["id"]]["answer"],
+            retrieved_contexts=[c["text"] for c in chunks_for_run(q, run)],
+            reference=q["reference"],
+        )
+        for q in retrieved
+    ])
 
 
-def load_completed_metrics() -> dict:
-    """Reads results.csv if it exists, returning {metric_name: {user_input: score}}
-    for metrics already fully scored -- so we can skip them on rerun."""
-    if not os.path.exists(RESULTS_PATH):
-        return {}
-    df = pd.read_csv(RESULTS_PATH)
-    completed = {}
-    for metric_name in METRICS:
-        if metric_name in df.columns and df[metric_name].notna().all():
-            completed[metric_name] = dict(zip(df["user_input"], df[metric_name]))
-    return completed
+def load_results() -> pd.DataFrame:
+    if os.path.exists(RESULTS_PATH):
+        return pd.read_csv(RESULTS_PATH)
+    return pd.DataFrame(columns=["run", "id", "category", "user_input", "response", *METRICS])
+
+
+def set_scores(results: pd.DataFrame, run: str, retrieved: list[dict], answers: dict,
+               metric: str | None = None, scores: list | None = None) -> pd.DataFrame:
+    """Makes sure every question of `run` has a row, and optionally writes one
+    metric's scores (same order as `retrieved`). Rows are found by (run, id),
+    never by question text, so a deliberately repeated question keeps 2 rows."""
+    for q in retrieved:
+        mask = (results["run"] == run) & (results["id"] == q["id"])
+        if not mask.any():
+            results.loc[len(results)] = {"run": run, "id": q["id"], "category": q["category"],
+                                         "user_input": q["user_input"], "response": answers[q["id"]]["answer"]}
+    if metric:
+        for q, score in zip(retrieved, scores):
+            results.loc[(results["run"] == run) & (results["id"] == q["id"]), metric] = score
+    return results
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--runs", default=",".join(DEFAULT_RUNS), help="comma-separated, e.g. hybrid@2,hybrid_rerank@3")
+    runs = parser.parse_args().runs.split(",")
+
     import subprocess
     print("[gpu check before anything else]")
     print(subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.free", "--format=csv"], capture_output=True, text=True).stdout)
 
-    retrieved = load_retrieved()
+    retrieved = load_json("eval/retrieved.json", [])
     print(f"Loaded {len(retrieved)} retrieved results.")
-    generated = load_or_generate_answers(retrieved)
-    dataset = build_dataset(generated)
+    generated = load_json(GENERATED_PATH, {})
+
+    # Generate everything first (local, no quota), then spend Groq quota.
+    for run in runs:
+        generate_for_run(retrieved, run, generated)
 
     evaluator_llm = get_evaluator_llm()
     evaluator_embeddings = get_evaluator_embeddings()
-    run_config = RunConfig(max_workers=1, timeout=900, max_retries=8, max_wait=60)
+    run_config = RunConfig(max_workers=1, timeout=900, max_retries=8, max_wait=60)  # retries + backoff on rate limits
 
-    completed = load_completed_metrics()
-    all_scores = {name: completed[name] for name in completed}
+    results = load_results()
+    for run in runs:
+        answers = generated[run]
+        results = set_scores(results, run, retrieved, answers)
+        rows = results[results["run"] == run]
+        for metric_name, metric_factory in METRICS.items():
+            if rows[metric_name].notna().all():
+                print(f"[{run}] skipping {metric_name} -- already scored")
+                continue
 
-    for metric_name, metric_factory in METRICS.items():
-        if metric_name in completed:
-            print(f"Skipping {metric_name} -- already fully scored in {RESULTS_PATH}")
-            continue
+            print(f"[{run}] scoring metric: {metric_name}")
+            try:
+                result = evaluate(
+                    dataset=build_dataset(retrieved, run, answers),
+                    metrics=[metric_factory()],
+                    llm=evaluator_llm,
+                    embeddings=evaluator_embeddings,
+                    run_config=run_config,
+                    raise_exceptions=True,
+                )
+            except Exception as e:
+                print(f"Stopped while scoring {metric_name} for {run}: {e}")
+                print("Everything finished before this point is saved. Rerun later (e.g. after the quota resets):")
+                print("it skips completed metrics and continues from here.")
+                return
+            results = set_scores(results, run, retrieved, answers, metric_name, result.to_pandas()[metric_name].tolist())
+            results.to_csv(RESULTS_PATH, index=False)
+            print(f"[{run}] saved {metric_name} to {RESULTS_PATH}")
+            rows = results[results["run"] == run]
 
-        print(f"Scoring metric: {metric_name}")
-        try:
-            result = evaluate(
-                dataset=dataset,
-                metrics=[metric_factory()],
-                llm=evaluator_llm,
-                embeddings=evaluator_embeddings,
-                run_config=run_config,
-                raise_exceptions=True,
-            )
-        except Exception as e:
-            print(f"Stopped while scoring {metric_name}: {e}")
-            print("Already-completed metrics were saved before this point.")
-            print(f"Rerun this script later -- it will skip {list(completed.keys())} "
-                  f"and pick up starting from {metric_name}.")
-            break
-
-        df = result.to_pandas()
-        all_scores[metric_name] = dict(zip(df["user_input"], df[metric_name]))
-        _save_results(generated, all_scores)
-        print(f"Saved {metric_name} to {RESULTS_PATH}")
-
-    else:
-        print("All metrics scored successfully.")
-
-
-def _save_results(generated: list[dict], all_scores: dict):
-    rows = []
-    for item in generated:
-        row = {"user_input": item["user_input"], "response": item["answer"]}
-        for metric_name in METRICS:
-            row[metric_name] = all_scores.get(metric_name, {}).get(item["user_input"])
-        rows.append(row)
-    pd.DataFrame(rows).to_csv(RESULTS_PATH, index=False)
+    results.to_csv(RESULTS_PATH, index=False)
+    print("All runs scored. Now run: python -m eval.ablation")
 
 
 if __name__ == "__main__":
