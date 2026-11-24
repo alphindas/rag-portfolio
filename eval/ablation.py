@@ -91,6 +91,30 @@ def markdown_table(rows: list[dict], columns: dict) -> str:
     return "\n".join(lines)
 
 
+SUBSETS = {
+    "Keyword, design set (the 4 questions the BM25 rule was designed on)": lambda q: q["category"] == "keyword",
+    "Keyword, holdout (6 new questions, not used for design)": lambda q: q.get("holdout"),
+    "Hard (two wells / two days / look-alike numbers)": lambda q: q["category"] == "hard",
+}
+
+
+def print_subsets(retrieved: list[dict]) -> None:
+    """Hit@k / MRR for hand-picked groups of questions, plain vs weighted hybrid side by side."""
+    from retrieve.hybrid import has_exact_token  # lazy: pulls in torch
+    cols = ("hybrid", "hybrid_weighted", "hybrid_rerank", "hybrid_weighted_rerank")
+    for title, pick in SUBSETS.items():
+        qs = [q for q in retrieved if pick(q)]
+        fired = sum(has_exact_token(q["user_input"]) for q in qs)
+        print(f"\n### {title}: n={len(qs)}, weighting rule fires on {fired}\n")
+        table = []
+        for metric, k in (("hit", 2), ("hit", 3), ("recall", 2), ("recall", 3), ("rr", 0)):
+            row = {"metric": "MRR" if metric == "rr" else f"{metric.capitalize()}@{k}"}
+            for setup in cols:
+                row[setup] = mean([retrieval_scores(q, setup, k or 3)[metric] for q in qs])
+            table.append(row)
+        print(markdown_table(table, {"metric": "Metric", **{s: SETUPS[s] for s in cols}}))
+
+
 def print_before_after(rows: list[dict], cats: list[dict]) -> None:
     """Compares against the saved baseline (plain chunks, equal-weight RRF)."""
     if not os.path.exists(BASELINE_PATH):
@@ -153,6 +177,7 @@ def main():
     print(markdown_table([{**c, "category": f"{c['category']} (n={c['n']})"} for c in cats],
                          {"category": "Category", **{s: s for s in SETUPS.values()}}))
     print_before_after(rows, cats)
+    print_subsets(retrieved)
 
     scored = [r for r in rows if r["faithfulness"] is not None]
     if scored:

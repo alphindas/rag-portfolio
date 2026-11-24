@@ -444,5 +444,293 @@
         "text": "to 10,955 ft"
       }
     ]
+  },
+  {
+    "id": "q31",
+    "category": "keyword_holdout",
+    "user_input": "Which well and day used bit serial number BS-67080?",
+    "reference": "Harrier-2, Day 5.",
+    "gold_docs": [
+      "ddr_harrier2_day05.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_harrier2_day05.md",
+        "text": "bit serial number BS-67080"
+      }
+    ],
+    "holdout": true
+  },
+  {
+    "id": "q32",
+    "category": "keyword_holdout",
+    "user_input": "Which report is work order WO-17861 in, and what was the cause?",
+    "reference": "Merlin-8, Day 2: an MWD tool signal loss (0.5 hours).",
+    "gold_docs": [
+      "ddr_merlin8_day02.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_merlin8_day02.md",
+        "text": "Work order WO-17861"
+      }
+    ],
+    "holdout": true
+  },
+  {
+    "id": "q33",
+    "category": "keyword_holdout",
+    "user_input": "On which well and day did drilling end at 8,700 ft?",
+    "reference": "Falcon-3, Day 13.",
+    "gold_docs": [
+      "ddr_falcon3_day13.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_falcon3_day13.md",
+        "text": "to 8,700 ft"
+      }
+    ],
+    "holdout": true
+  },
+  {
+    "id": "q34",
+    "category": "keyword_holdout",
+    "user_input": "Which report lists Chlorides: 19,800 mg/L?",
+    "reference": "Kestrel-4, Day 15.",
+    "gold_docs": [
+      "ddr_kestrel4_day15.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_kestrel4_day15.md",
+        "text": "Chlorides: 19,800 mg/L."
+      }
+    ],
+    "holdout": true
+  },
+  {
+    "id": "q35",
+    "category": "keyword_holdout",
+    "user_input": "Which report states an average rate of penetration of 20.9 ft/hr?",
+    "reference": "Condor-9, Day 3.",
+    "gold_docs": [
+      "ddr_condor9_day03.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_condor9_day03.md",
+        "text": "averaged 20.9 ft/hr"
+      }
+    ],
+    "holdout": true
+  },
+  {
+    "id": "q36",
+    "category": "keyword_holdout",
+    "user_input": "Which report lists a mud weight of 12.1 ppg?",
+    "reference": "Osprey-5, Day 7.",
+    "gold_docs": [
+      "ddr_osprey5_day07.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_osprey5_day07.md",
+        "text": "Mud weight: 12.1 ppg."
+      }
+    ],
+    "holdout": true
+  },
+  {
+    "id": "q37",
+    "category": "hard",
+    "user_input": "Which had the higher mud weight on Day 4, Condor-7 or Condor-9, and by how much?",
+    "reference": "Condor-9 had the higher mud weight: 9.4 ppg versus 9.2 ppg for Condor-7, a difference of 0.2 ppg.",
+    "gold_docs": [
+      "ddr_condor7_day04.md",
+      "ddr_condor9_day04.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_condor7_day04.md",
+        "text": "Mud weight: 9.2 ppg"
+      },
+      {
+        "doc": "ddr_condor9_day04.md",
+        "text": "Mud weight: 9.4 ppg"
+      }
+    ],
+    "hard_type": "two_wells"
+  },
+  {
+    "id": "q38",
+    "category": "hard",
+    "user_input": "Which was drilling faster on Day 12, Falcon-1 or Falcon-3?",
+    "reference": "Falcon-1 had the higher rate of penetration: 11.7 ft/hr versus 10.5 ft/hr for Falcon-3, a difference of 1.2 ft/hr.",
+    "gold_docs": [
+      "ddr_falcon1_day12.md",
+      "ddr_falcon3_day12.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_falcon1_day12.md",
+        "text": "averaged 11.7 ft/hr"
+      },
+      {
+        "doc": "ddr_falcon3_day12.md",
+        "text": "averaged 10.5 ft/hr"
+      }
+    ],
+    "hard_type": "two_wells"
+  },
+  {
+    "id": "q39",
+    "category": "hard",
+    "user_input": "Which had the higher funnel viscosity on Day 12, Falcon-1 or Falcon-3?",
+    "reference": "Falcon-3 had the higher funnel viscosity: 48 sec/qt versus 42 sec/qt for Falcon-1, a difference of 6.0 sec/qt.",
+    "gold_docs": [
+      "ddr_falcon1_day12.md",
+      "ddr_falcon3_day12.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_falcon1_day12.md",
+        "text": "Funnel viscosity: 42 sec/qt"
+      },
+      {
+        "doc": "ddr_falcon3_day12.md",
+        "text": "Funnel viscosity: 48 sec/qt"
+      }
+    ],
+    "hard_type": "two_wells"
+  },
+  {
+    "id": "q40",
+    "category": "hard",
+    "user_input": "Which had the higher chlorides on Day 13, Falcon-1 or Falcon-3?",
+    "reference": "Falcon-3 had the higher chloride level: 20,500 mg/L versus 19,200 mg/L for Falcon-1, a difference of 1300.0 mg/L.",
+    "gold_docs": [
+      "ddr_falcon1_day13.md",
+      "ddr_falcon3_day13.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_falcon1_day13.md",
+        "text": "Chlorides: 19,200 mg/L"
+      },
+      {
+        "doc": "ddr_falcon3_day13.md",
+        "text": "Chlorides: 20,500 mg/L"
+      }
+    ],
+    "hard_type": "two_wells"
+  },
+  {
+    "id": "q41",
+    "category": "hard",
+    "user_input": "Which had the higher mud weight on Day 5, Condor-7 or Condor-9?",
+    "reference": "Condor-9 had the higher mud weight: 9.5 ppg versus 9.3 ppg for Condor-7, a difference of 0.2 ppg.",
+    "gold_docs": [
+      "ddr_condor7_day05.md",
+      "ddr_condor9_day05.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_condor7_day05.md",
+        "text": "Mud weight: 9.3 ppg"
+      },
+      {
+        "doc": "ddr_condor9_day05.md",
+        "text": "Mud weight: 9.5 ppg"
+      }
+    ],
+    "hard_type": "two_wells"
+  },
+  {
+    "id": "q42",
+    "category": "hard",
+    "user_input": "What was the combined non-productive time of Falcon-1 and Falcon-3 on Day 12?",
+    "reference": "4 hours: 2.5 hours on Falcon-1 and 1.5 hours on Falcon-3.",
+    "gold_docs": [
+      "ddr_falcon1_day12.md",
+      "ddr_falcon3_day12.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_falcon1_day12.md",
+        "text": "2.5 hours non-productive time"
+      },
+      {
+        "doc": "ddr_falcon3_day12.md",
+        "text": "1.5 hours non-productive time"
+      }
+    ],
+    "hard_type": "two_wells",
+    "long_doc": true
+  },
+  {
+    "id": "q43",
+    "category": "hard",
+    "user_input": "How many rig crew were on site in total on Day 12, counting Falcon-1 and Falcon-3?",
+    "reference": "28: 14 on Falcon-1 and 14 on Falcon-3.",
+    "gold_docs": [
+      "ddr_falcon1_day12.md",
+      "ddr_falcon3_day12.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_falcon1_day12.md",
+        "text": "14 rig crew"
+      },
+      {
+        "doc": "ddr_falcon3_day12.md",
+        "text": "14 rig crew"
+      }
+    ],
+    "hard_type": "two_wells",
+    "long_doc": true
+  },
+  {
+    "id": "q44",
+    "category": "hard",
+    "user_input": "By how much did Kestrel-4's mud weight change between Day 16 and Day 19?",
+    "reference": "From 11.5 ppg on Day 16 to 11.9 ppg on Day 19, a change of +0.4 ppg.",
+    "gold_docs": [
+      "ddr_kestrel4_day16.md",
+      "ddr_kestrel4_day19.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_kestrel4_day16.md",
+        "text": "Mud weight: 11.5 ppg."
+      },
+      {
+        "doc": "ddr_kestrel4_day19.md",
+        "text": "Mud weight: 11.9 ppg."
+      }
+    ],
+    "hard_type": "two_days",
+    "long_doc": true
+  },
+  {
+    "id": "q45",
+    "category": "hard",
+    "user_input": "How many feet did Harrier-2 drill on Day 5 and Day 6 combined?",
+    "reference": "930 ft: 530 ft on Day 5 and 400 ft on Day 6.",
+    "gold_docs": [
+      "ddr_harrier2_day05.md",
+      "ddr_harrier2_day06.md"
+    ],
+    "evidence": [
+      {
+        "doc": "ddr_harrier2_day05.md",
+        "text": "from 1,835 ft to 2,365 ft"
+      },
+      {
+        "doc": "ddr_harrier2_day06.md",
+        "text": "from 2,365 ft to 2,765 ft"
+      }
+    ],
+    "hard_type": "two_days"
   }
 ]

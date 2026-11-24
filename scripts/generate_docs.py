@@ -25,6 +25,7 @@ Things that make retrieval hard on purpose:
 
 import json
 import random
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -295,6 +296,97 @@ def build_questions(R):
     t = R["Osprey-5", 11]
     add("keyword", f"Which well and day reached a depth of {fmt(t['end'])} ft?", f"{t['well']}, Day {t['day']}.",
         [ev(t["doc"], f"to {fmt(t['end'])} ft")])
+    # --- NEW, added after the BM25 weighting rule was designed on the 4 keyword
+    # --- questions above. They were NOT used to design or tune anything.
+    docs = {p.name: p.read_text(encoding="utf-8") for p in DOCS_DIR.glob("ddr_*.md")}
+    docs.update({r["doc"]: r["text"] for r in R.values()})
+
+    def count(text):  # how many documents contain this exact phrase
+        return sum(text in t for t in docs.values())
+
+    def first_unique(keys, phrase_fn):
+        """First (well, day) in a fixed list whose phrase appears in exactly 1 document."""
+        for key in keys:
+            if count(phrase_fn(R[key])) == 1:
+                return R[key]
+        raise AssertionError("no unique candidate")
+
+    holdout = {"holdout": True}
+    h = R["Harrier-2", 5]
+    add("keyword_holdout", f"Which well and day used bit serial number {h['bit']}?", f"{h['well']}, Day {h['day']}.",
+        [ev(h["doc"], f"bit serial number {h['bit']}")], **holdout)
+    w = next(r for r in R.values() if r["wo"] and r["well"] == "Merlin-8")
+    add("keyword_holdout", f"Which report is work order {w['wo']} in, and what was the cause?",
+        f"{w['well']}, Day {w['day']}: {w['cause']} ({w['npt_h']:.1f} hours).", [ev(w["doc"], f"Work order {w['wo']}")], **holdout)
+    f13 = R["Falcon-3", 13]
+    add("keyword_holdout", f"On which well and day did drilling end at {fmt(f13['end'])} ft?", f"{f13['well']}, Day {f13['day']}.",
+        [ev(f13["doc"], f"to {fmt(f13['end'])} ft")], **holdout)
+    chl_re = re.compile(r"Chlorides: ([\d,]+) mg/L\.")
+    k = first_unique([("Kestrel-4", d) for d in range(15, 21)], lambda r: chl_re.search(r["text"]).group(0))
+    chl = chl_re.search(k["text"]).group(0)
+    add("keyword_holdout", f"Which report lists {chl[:-1]}?", f"{k['well']}, Day {k['day']}.", [ev(k["doc"], chl)], **holdout)
+    c = first_unique([("Condor-9", d) for d in range(3, 9)], lambda r: f"averaged {r['rop']} ft/hr")
+    add("keyword_holdout", f"Which report states an average rate of penetration of {c['rop']} ft/hr?", f"{c['well']}, Day {c['day']}.",
+        [ev(c["doc"], f"averaged {c['rop']} ft/hr")], **holdout)
+    o = first_unique([("Osprey-5", d) for d in range(7, 13)], lambda r: f"Mud weight: {r['weight']:.1f} ppg.")
+    add("keyword_holdout", f"Which report lists a mud weight of {o['weight']:.1f} ppg?", f"{o['well']}, Day {o['day']}.",
+        [ev(o["doc"], f"Mud weight: {o['weight']:.1f} ppg.")], **holdout)
+
+    # --- NEW harder questions: two wells or two days, close numbers ----------
+    def num(doc, pattern):
+        return float(re.search(pattern, docs[doc]).group(1).replace(",", ""))
+
+    def line(doc, pattern):
+        return re.search(pattern, docs[doc]).group(0)
+
+    MUD, ROP = r"Mud weight: ([\d.]+) ppg", r"averaged ([\d.]+) ft/hr"
+
+    def compare(question, doc_a, name_a, doc_b, name_b, pattern, unit, noun):
+        a, b = num(doc_a, pattern), num(doc_b, pattern)
+        assert a != b, question
+        hi, lo = (name_a, name_b) if a > b else (name_b, name_a)
+        add("hard", question, f"{hi} had the higher {noun}: {max(a, b):,g} {unit} versus {min(a, b):,g} {unit} for {lo}, a difference of {abs(a - b):.1f} {unit}.",
+            [ev(doc_a, line(doc_a, pattern)), ev(doc_b, line(doc_b, pattern))], hard_type="two_wells")
+
+    def doc(well, day):
+        return R[well, day]["doc"]
+
+    c7d4, c7d5 = "ddr_condor7_day04.md", "ddr_condor7_day05.md"
+    compare("Which had the higher mud weight on Day 4, Condor-7 or Condor-9, and by how much?",
+            c7d4, "Condor-7", doc("Condor-9", 4), "Condor-9", MUD, "ppg", "mud weight")
+    compare("Which was drilling faster on Day 12, Falcon-1 or Falcon-3?",
+            "ddr_falcon1_day12.md", "Falcon-1", doc("Falcon-3", 12), "Falcon-3", ROP, "ft/hr", "rate of penetration")
+    compare("Which had the higher funnel viscosity on Day 12, Falcon-1 or Falcon-3?",
+            "ddr_falcon1_day12.md", "Falcon-1", doc("Falcon-3", 12), "Falcon-3", r"Funnel viscosity: (\d+) sec/qt", "sec/qt", "funnel viscosity")
+    compare("Which had the higher chlorides on Day 13, Falcon-1 or Falcon-3?",
+            "ddr_falcon1_day13.md", "Falcon-1", doc("Falcon-3", 13), "Falcon-3", r"Chlorides: ([\d,]+) mg/L", "mg/L", "chloride level")
+    compare("Which had the higher mud weight on Day 5, Condor-7 or Condor-9?",
+            c7d5, "Condor-7", doc("Condor-9", 5), "Condor-9", MUD, "ppg", "mud weight")
+
+    f12 = R["Falcon-3", 12]
+    f3_npt = f12["npt_h"]
+    f3_evidence = f"{f3_npt:.1f} hours non-productive time" if f3_npt else "No non-productive time recorded"
+    add("hard", "What was the combined non-productive time of Falcon-1 and Falcon-3 on Day 12?",
+        f"{2.5 + f3_npt:g} hours: 2.5 hours on Falcon-1 and {f3_npt:g} hours on Falcon-3.",
+        [ev("ddr_falcon1_day12.md", "2.5 hours non-productive time"), ev(f12["doc"], f3_evidence)], hard_type="two_wells", long_doc=True)
+    crew = lambda d: int(re.search(r"(\d+) rig crew", docs[d]).group(1))
+    add("hard", "How many rig crew were on site in total on Day 12, counting Falcon-1 and Falcon-3?",
+        f"{crew('ddr_falcon1_day12.md') + crew(f12['doc'])}: {crew('ddr_falcon1_day12.md')} on Falcon-1 and {crew(f12['doc'])} on Falcon-3.",
+        [ev("ddr_falcon1_day12.md", f"{crew('ddr_falcon1_day12.md')} rig crew"), ev(f12["doc"], f"{crew(f12['doc'])} rig crew")],
+        hard_type="two_wells", long_doc=True)
+
+    k16, k19 = R["Kestrel-4", 16], R["Kestrel-4", 19]
+    delta = k19["weight"] - k16["weight"]
+    assert delta != 0
+    add("hard", "By how much did Kestrel-4's mud weight change between Day 16 and Day 19?",
+        f"From {k16['weight']:.1f} ppg on Day 16 to {k19['weight']:.1f} ppg on Day 19, a change of {delta:+.1f} ppg.",
+        [ev(k16["doc"], f"Mud weight: {k16['weight']:.1f} ppg."), ev(k19["doc"], f"Mud weight: {k19['weight']:.1f} ppg.")],
+        hard_type="two_days", long_doc=True)
+    h5, h6 = R["Harrier-2", 5], R["Harrier-2", 6]
+    add("hard", "How many feet did Harrier-2 drill on Day 5 and Day 6 combined?",
+        f"{fmt(h6['end'] - h5['start'])} ft: {fmt(h5['end'] - h5['start'])} ft on Day 5 and {fmt(h6['end'] - h6['start'])} ft on Day 6.",
+        [ev(h5["doc"], f"from {fmt(h5['start'])} ft to {fmt(h5['end'])} ft"), ev(h6["doc"], f"from {fmt(h6['start'])} ft to {fmt(h6['end'])} ft")],
+        hard_type="two_days")
     return qs
 
 
@@ -304,7 +396,7 @@ def validate(questions, docs):
     for q in questions:
         for e in q["evidence"]:
             assert e["text"] in docs[e["doc"]], (q["id"], e)
-        if q["category"] == "keyword":
+        if q["category"] in ("keyword", "keyword_holdout"):
             hits = [d for d, t in docs.items() if q["evidence"][0]["text"] in t]
             assert len(hits) == 1, (q["id"], hits)
         if q["category"] == "not_documented":
