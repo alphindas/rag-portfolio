@@ -1,0 +1,11 @@
+.git
+venv
+.venv
+__pycache__
+*.pyc
+.env
+chroma_db
+bm25_index
+logs
+*.log
+.pytest_cache
