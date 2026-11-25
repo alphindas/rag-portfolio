@@ -1,0 +1,276 @@
+{
+  "hybrid_weighted@2": {
+    "q01": {
+      "answer": "The mud weight on Condor-7 on Day 4 was 9.2 ppg [1]."
+    },
+    "q02": {
+      "answer": "The average rate of penetration on Falcon-1 Day 12 was 11.7 ft/hr [1]."
+    },
+    "q03": {
+      "answer": "According to the context, a crew member sustained a minor hand laceration while handling casing tongs, but the incident was treated on site and no further medical attention was required [1]."
+    },
+    "q04": {
+      "answer": "Not documented in the provided context."
+    },
+    "q05": {
+      "answer": "The mud weight was 11.1 ppg on the day it reached casing point [1]."
+    },
+    "q06": {
+      "answer": "The well that experienced downtime due to a cementing unit delay is Condor-7 [2]."
+    },
+    "q07": {
+      "answer": "A top drive hydraulic leak occurred, resulting in 2.5 hours of non-productive time [1]."
+    },
+    "q08": {
+      "answer": "Falcon-1's mud weight on Day 13 was 11.1 ppg, and it was increased from the prior day's weight to manage anticipated pore pressure at the casing point [1]."
+    },
+    "q09": {
+      "answer": "Falcon-1's mud weight on Day 13 was 11.1 ppg, and it was increased from the prior day's weight to manage anticipated pore pressure at the casing point [1]."
+    },
+    "q10": {
+      "answer": "The on_click method does not handle rapid repeated clicks in Widget Framework [1]. The provided context does not mention how the method handles repeated clicks, only that it increments the count and rerenders the widget when clicked [1]."
+    },
+    "q11": {
+      "answer": "The depth Harrier-2 reached on Day 4 is 1,835 ft [1]."
+    },
+    "q12": {
+      "answer": "Not documented in the provided context."
+    },
+    "q13": {
+      "answer": "According to the context, 40 bbl (barrels) of fluid was lost when lost circulation occurred on Merlin-8 [1]."
+    },
+    "q14": {
+      "answer": "The mud weight on Condor-9 on Day 4 was 9.4 ppg [1]."
+    },
+    "q15": {
+      "answer": "Not documented in the provided context."
+    },
+    "q16": {
+      "answer": "Not documented in the provided context."
+    },
+    "q17": {
+      "answer": "The mud weight on Day 2 was 9.7 ppg [1]."
+    },
+    "q18": {
+      "answer": "The Condor-9 report for Day 6 was prepared by R. Haldane, Company Man [1]."
+    },
+    "q19": {
+      "answer": "The mud weight on Day 2 was 9.7 ppg, and the mud weight on Day 5 was 9.9 ppg. Therefore, the mud weight increased by 0.2 ppg between Day 2 and Day 5 [1]."
+    },
+    "q20": {
+      "answer": "Not documented in the provided context."
+    },
+    "q21": {
+      "answer": "The rate of penetration on Condor-9 was higher on Day 4, averaging 25.2 ft/hr, compared to Day 5, which is not documented in the provided context."
+    },
+    "q22": {
+      "answer": "To find the total feet drilled by Kestrel-4 across Day 16 and Day 17, we need to look at the drilling records for each day.\n\nOn Day 16, the drilling records show:\n\n* 16:00: Drilled ahead from 12,447 ft to 12,500 ft, WOB 18 klbs, rotary 80 rpm, standpipe pressure 3,120 psi. (1 ft)\n* 16:00: Slow-pump rates at 3,090 psi. (no distance recorded)\n* 17:18: Serviced top drive and inspected drilling line. (no distance recorded)\n* 18:36: Pumped sweep, observed shakers, returns normal. (no distance recorded)\n* 19:53: Slow-pump rates at 2,900 psi. (no distance recorded)\n* 21:11: Pumped sweep, observed shakers, returns normal. (no distance recorded)\n\nOn Day 17, the drilling records show:\n\n* 13:11: Drilled ahead from 12,445 ft to 12,484 ft, WOB 11 klbs, rotary 99 rpm, standpipe pressure 2,960 psi. (1 ft)\n* 14:30: Serviced top drive and inspected drilling line. (no distance recorded)\n* 16:00: Checked pump pressures and recorded slow-pump rates at 3,090 psi. (no distance recorded)\n* 17:18: Serviced top drive and inspected drilling line. (no distance recorded)\n* 18:36: Pumped sweep, observed shakers, returns normal. (no distance recorded)\n* 19:53: Checked pump pressures and recorded slow-pump rates at 2,900 psi. (no distance recorded)\n* 21:11: Pumped sweep, observed shakers, returns normal. (no distance recorded)\n\nThe total distance drilled on Day 16 is 1 ft, and on Day 17 is 1 ft. Therefore, the total distance drilled by Kestrel-4 across Day 16 and Day 17 is 2 ft.\n\nAnswer: 2 ft."
+    },
+    "q23": {
+      "answer": "Not documented in the provided context."
+    },
+    "q24": {
+      "answer": "The toolpusher on Rig 88 is not documented in the provided context."
+    },
+    "q25": {
+      "answer": "Not documented in the provided context."
+    },
+    "q26": {
+      "answer": "Not documented in the provided context."
+    },
+    "q27": {
+      "answer": "The well that used bit serial number BS-85748 is Merlin-8, and it was drilled on Day 3 [1]."
+    },
+    "q28": {
+      "answer": "The downtime recorded under work order WO-98389 was due to a delayed mud delivery from the supply base [1]."
+    },
+    "q29": {
+      "answer": "The report that lists chlorides of 19,200 mg/L is [2] (Daily Drilling Report -- Falcon-1 > Report Info)."
+    },
+    "q30": {
+      "answer": "Not documented in the provided context."
+    },
+    "q31": {
+      "answer": "The well that used bit serial number BS-67080 is Harrier-2, on Day 5 [1]."
+    },
+    "q32": {
+      "answer": "The report that contains work order WO-17861 is the Daily Drilling Report -- Condor-7 > Report Info [2].\n\nThe cause of the work order WO-17861 is not documented in the provided context."
+    },
+    "q33": {
+      "answer": "The drilling ended at 8,700 ft on Day 13 of the Falcon-3 well [2]."
+    },
+    "q34": {
+      "answer": "The report that lists Chlorides: 19,800 mg/L is [1]."
+    },
+    "q35": {
+      "answer": "The report that states an average rate of penetration of 20.9 ft/hr is [1]."
+    },
+    "q36": {
+      "answer": "Not documented in the provided context."
+    },
+    "q37": {
+      "answer": "The mud weight for Condor-7 is 9.3 ppg, and the mud weight for Condor-9 is 9.7 ppg. Therefore, Condor-9 had a higher mud weight by 0.4 ppg. [1]"
+    },
+    "q38": {
+      "answer": "Not documented in the provided context."
+    },
+    "q39": {
+      "answer": "The funnel viscosity on Day 12 was 42 sec/qt for Falcon-1 [1]."
+    },
+    "q40": {
+      "answer": "Falcon-3 had the higher chlorides on Day 13, with a concentration of 20,500 mg/L [2]."
+    },
+    "q41": {
+      "answer": "The mud weight on Day 5 for Condor-7 was 9.3 ppg [1]."
+    },
+    "q42": {
+      "answer": "The combined non-productive time of Falcon-1 and Falcon-3 on Day 12 was 2.5 hours [1]."
+    },
+    "q43": {
+      "answer": "The total number of rig crew on site on Day 12 is 14 (Falcon-1) + 12 (Falcon-3) = 26 [1]."
+    },
+    "q44": {
+      "answer": "The mud weight changed from 11.5 ppg to 12.0 ppg between Day 16 and Day 20."
+    },
+    "q45": {
+      "answer": "To find the total feet drilled on Day 5 and Day 6, we need to add the feet drilled on each day.\n\nOn Day 5, the well drilled 27.9 ft/hr for 1 hour, so the total feet drilled is 27.9 ft/hr * 1 hr = 27.9 ft [1]. \n\nOn Day 6, the well drilled 25.1 ft/hr for 1 hour, so the total feet drilled is 25.1 ft/hr * 1 hr = 25.1 ft [1].\n\nThe total feet drilled on Day 5 and Day 6 combined is 27.9 ft + 25.1 ft = 53 ft [1]."
+    }
+  },
+  "hybrid_weighted_rerank@2": {
+    "q01": {
+      "answer": "The mud weight on Condor-7 on Day 4 was 9.2 ppg [1]."
+    },
+    "q02": {
+      "answer": "Not documented in the provided context."
+    },
+    "q03": {
+      "answer": "According to the context, a crew member sustained a minor hand laceration while handling casing tongs, but the incident was treated on site and no further medical attention was required [1]."
+    },
+    "q04": {
+      "answer": "Not documented in the provided context."
+    },
+    "q05": {
+      "answer": "The mud weight was 11.1 ppg on the day it reached casing point [1]."
+    },
+    "q06": {
+      "answer": "The well that experienced downtime due to a cementing unit delay is Condor-7 [1]."
+    },
+    "q07": {
+      "answer": "A near-miss was reported: a pipe wrench left on the rig floor walkway during a connection [1]."
+    },
+    "q08": {
+      "answer": "Falcon-1's mud weight on Day 13 was 11.1 ppg, and it was increased from the prior day's weight to manage anticipated pore pressure at the casing point [1]."
+    },
+    "q09": {
+      "answer": "Falcon-1's mud weight on Day 13 was 11.1 ppg, and it was increased from the prior day's weight to manage anticipated pore pressure at the casing point [1]."
+    },
+    "q10": {
+      "answer": "The on_click method handles rapid repeated clicks in Widget Framework by incrementing the count and then calling self.rerender() [1]. This ensures that the widget's state is updated and it is re-rendered with the new count [1]."
+    },
+    "q11": {
+      "answer": "The depth Harrier-2 reached on Day 4 is 1,835 ft [1]."
+    },
+    "q12": {
+      "answer": "Not documented in the provided context."
+    },
+    "q13": {
+      "answer": "40 bbl [1]"
+    },
+    "q14": {
+      "answer": "The mud weight on Condor-9 on Day 4 was 9.4 ppg [1]."
+    },
+    "q15": {
+      "answer": "Not documented in the provided context."
+    },
+    "q16": {
+      "answer": "The mud weight on Falcon-3 on Day 12 was 10.9 ppg [1]."
+    },
+    "q17": {
+      "answer": "The mud weight on Day 2 was 9.7 ppg [1]."
+    },
+    "q18": {
+      "answer": "The report for Day 6 was prepared by R. Haldane, Company Man [1]."
+    },
+    "q19": {
+      "answer": "The mud weight on Day 2 was 9.7 ppg, and the mud weight on Day 5 was 9.9 ppg. Therefore, the mud weight increased by 0.2 ppg between Day 2 and Day 5 [1]."
+    },
+    "q20": {
+      "answer": "According to the context, Osprey-5 recorded 2.0 hours of non-productive time on Day 8 due to a top drive hydraulic leak [1], and 1.5 hours of non-productive time on Day 9 due to a mud pump liner failure [1]. Therefore, the total non-productive time recorded is 2.0 + 1.5 = 3.5 hours [1]."
+    },
+    "q21": {
+      "answer": "The rate of penetration on Condor-9 for Day 4 is 25.2 ft/hr, but the rate of penetration for Day 5 is not mentioned. Therefore, we cannot determine which day had the higher rate of penetration, and we cannot determine by how much."
+    },
+    "q22": {
+      "answer": "To find the total feet drilled by Kestrel-4, we need to look at the information provided for both Day 16 and Day 17.\n\nFor Day 16, the report states that the 8 1/2\" hole section was drilled from 12,240 ft to 12,405 ft, which is a total of 165 ft.\n\nHowever, the report does not provide information on the drilling depth for Day 17. It only mentions that the crew will continue drilling ahead to the planned section depth, but it does not specify the depth.\n\nTherefore, the answer is: Not documented in the provided context."
+    },
+    "q23": {
+      "answer": "Not documented in the provided context."
+    },
+    "q24": {
+      "answer": "Not documented in the provided context."
+    },
+    "q25": {
+      "answer": "Not documented in the provided context."
+    },
+    "q26": {
+      "answer": "Not documented in the provided context."
+    },
+    "q27": {
+      "answer": "The well that used bit serial number BS-85748 is Merlin-8, and it was drilled on Day 3 [1]."
+    },
+    "q28": {
+      "answer": "The downtime recorded under work order WO-98389 was caused by a delayed mud delivery from the supply base [1]."
+    },
+    "q29": {
+      "answer": "Not documented in the provided context."
+    },
+    "q30": {
+      "answer": "The well that reached a depth of 10,955 ft is Osprey-5, and it was drilled on Day 12 [1]."
+    },
+    "q31": {
+      "answer": "The well that used bit serial number BS-67080 is Harrier-2, and it was drilled on Day 5 [1]."
+    },
+    "q32": {
+      "answer": "The work order WO-17861 is in report [1]. The cause of the non-productive time due to an MWD tool signal loss was not specified in the context, so the answer is: Not documented in the provided context."
+    },
+    "q33": {
+      "answer": "The answer is Day 13."
+    },
+    "q34": {
+      "answer": "The report that lists Chlorides: 19,800 mg/L is [1]."
+    },
+    "q35": {
+      "answer": "The report that states an average rate of penetration of 20.9 ft/hr is [1]."
+    },
+    "q36": {
+      "answer": "The report that lists a mud weight of 12.1 ppg is [2]."
+    },
+    "q37": {
+      "answer": "Not documented in the provided context."
+    },
+    "q38": {
+      "answer": "Not documented in the provided context."
+    },
+    "q39": {
+      "answer": "Not documented in the provided context."
+    },
+    "q40": {
+      "answer": "Falcon-3 had the higher chlorides on Day 13, with a concentration of 20,500 mg/L [2]."
+    },
+    "q41": {
+      "answer": "Not documented in the provided context."
+    },
+    "q42": {
+      "answer": "The combined non-productive time of Falcon-1 and Falcon-3 on Day 12 was 5.5 hours (1.5 hours from Falcon-3 + 2.5 hours from Falcon-1) [1]."
+    },
+    "q43": {
+      "answer": "The total number of rig crew members on site on Day 12 is 14 (Falcon-3) + 14 (Falcon-1) = 28 [1]."
+    },
+    "q44": {
+      "answer": "Not documented in the provided context."
+    },
+    "q45": {
+      "answer": "To find the total feet drilled on Day 5 and Day 6, we need to add the feet drilled on each day.\n\nOn Day 5, the well drilled 27.9 ft/hr for 1 hour, so the total feet drilled is 27.9 ft/hr * 1 hr = 27.9 ft [1]. \n\nOn Day 6, the well drilled 25.1 ft/hr for 1 hour, so the total feet drilled is 25.1 ft/hr * 1 hr = 25.1 ft [1].\n\nThe total feet drilled on Day 5 and Day 6 combined is 27.9 ft + 25.1 ft = 53 ft [1]."
+    }
+  }
+}
