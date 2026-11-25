@@ -26,6 +26,7 @@ script. Run the same command again after the quota resets.
 
 Run AFTER `python -m eval.run_retrieval`:
     python -m eval.run_eval --subset 30
+    python -m eval.run_eval --subset 30 --metrics faithfulness   # only some metrics
     python -m eval.run_eval --subset 30 --list        # show the subset and progress, no Groq calls
 """
 import argparse
@@ -138,10 +139,11 @@ def score_with_rate_limit_retry(*args) -> float | None:
             time.sleep(wait)
 
 
-def score_all(store: dict, runs: list[str], retrieved: list[dict], generated: dict, llm, embeddings, run_config) -> None:
+def score_all(store: dict, runs: list[str], retrieved: list[dict], generated: dict, llm, embeddings, run_config,
+              metrics: list[str] = store_lib.METRIC_NAMES) -> None:
     by_id = {q["id"]: q for q in retrieved}
-    todo = store_lib.pending(store, runs)
-    print(f"Judge: {store['judge_model']}. {len(todo)} scores to go.")
+    todo = store_lib.pending(store, runs, metrics)
+    print(f"Judge: {store['judge_model']}. Metrics: {', '.join(metrics)}. {len(todo)} scores to go.")
     failures = 0
     for i, (metric_name, run, qid) in enumerate(todo, start=1):
         try:
@@ -160,20 +162,22 @@ def score_all(store: dict, runs: list[str], retrieved: list[dict], generated: di
         store_lib.save_store(store)
         store_lib.results_table(store, retrieved, generated).to_csv(store_lib.RESULTS_PATH, index=False)
         print(f"[{i}/{len(todo)}] {metric_name} {run} {qid}: {'no score' if score is None else f'{score:.2f}'}")
-    left = len(store_lib.pending(store, runs))
-    print(f"{left} scores still missing; run again." if left else "All runs scored. Now run: python -m eval.ablation")
+    left = len(store_lib.pending(store, runs, metrics))
+    print(f"{left} scores still missing; run again." if left else
+          f"All runs scored for: {', '.join(metrics)}. Now run: python -m eval.ablation")
 
 
-def print_progress(store: dict, runs: list[str], subset: list[dict]) -> None:
+def print_progress(store: dict, runs: list[str], subset: list[dict], metrics: list[str]) -> None:
     print(f"\nJudge: {store['judge_model']}. {len(subset)} questions (seed {store['seed']}):")
     for q in subset:
         print(f"  {q['id']} [{q['category']}] {q['user_input']}")
     print()
-    for metric_name in METRICS:
+    for metric_name in METRICS:  # always all four, so earlier scores stay visible
         for run in runs:
             done = store["scores"].get(run, {}).get(metric_name, {})
             empty = sum(v is None for v in done.values())
-            print(f"  {metric_name:42s} {run:26s} {len(done)}/{len(subset)}" + (f" ({empty} with no score)" if empty else ""))
+            print(f"  {metric_name:42s} {run:26s} {len(done)}/{len(subset)}" + (f" ({empty} with no score)" if empty else "")
+                  + ("" if metric_name in metrics else "  [not selected]"))
 
 
 def main():
@@ -181,17 +185,19 @@ def main():
     parser.add_argument("--runs", default=",".join(DEFAULT_RUNS), help="comma-separated, e.g. hybrid@2,hybrid_rerank@3")
     parser.add_argument("--subset", type=int, help="score only this many questions, picked at random with --seed")
     parser.add_argument("--seed", type=int, default=store_lib.DEFAULT_SEED, help="seed for --subset (default %(default)s)")
+    parser.add_argument("--metrics", help="comma-separated, from: " + ", ".join(store_lib.METRIC_NAMES) + " (default: all four)")
     parser.add_argument("--list", action="store_true", help="show the questions and scoring progress, then exit")
     parser.add_argument("--generate-only", action="store_true",
                         help="only generate answers with the local LLM; no Groq calls, no RAGAS scoring")
     args = parser.parse_args()
     runs = args.runs.split(",")
+    metrics = store_lib.parse_metrics(args.metrics)
 
     retrieved = load_json("eval/retrieved.json", [])
     subset = store_lib.select_subset(retrieved, args.subset, args.seed)
     store = store_lib.load_store([q["id"] for q in subset], args.seed)
     if args.list:
-        print_progress(store, runs, subset)
+        print_progress(store, runs, subset, metrics)
         return
 
     print("[gpu check before anything else]")
@@ -211,7 +217,7 @@ def main():
     evaluator_llm = get_evaluator_llm()
     evaluator_embeddings = get_evaluator_embeddings()
     run_config = RunConfig(max_workers=1, timeout=900, max_retries=8, max_wait=60)  # retries + backoff on rate limits
-    score_all(store, runs, retrieved, generated, evaluator_llm, evaluator_embeddings, run_config)
+    score_all(store, runs, retrieved, generated, evaluator_llm, evaluator_embeddings, run_config, metrics)
 
 
 if __name__ == "__main__":

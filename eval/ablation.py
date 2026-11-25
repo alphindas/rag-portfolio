@@ -190,7 +190,7 @@ def main():
     scored = [r for r in rows if r["judge_model"]]
     if scored:
         print(f"\n### RAGAS (judge: {store['judge_model']}; same {len(store['question_ids'])} questions for every run; "
-              "'-' = not fully scored yet)\n")
+              "'-' = not scored, or not fully scored yet)\n")
         print(markdown_table(scored, {"setup": "Setup", "k": "k", "faithfulness": "Faithfulness",
                                       "answer_relevancy": "Answer relevancy",
                                       "llm_context_precision_without_reference": "Ctx precision",

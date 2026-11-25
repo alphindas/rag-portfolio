@@ -23,6 +23,18 @@ def test_pending_scores_one_metric_for_all_runs_first_and_resumes(tmp_path):
     assert scores.pending(scores.load_store(["q01", "q02"], 42, path), ["a", "b"]) == todo[2:]
 
 
+def test_metric_selection_keeps_scores_apart():
+    assert scores.parse_metrics(None) == scores.METRIC_NAMES
+    assert scores.parse_metrics("answer_relevancy, faithfulness,faithfulness") == ["faithfulness", "answer_relevancy"]
+    for bad in ("faithfullness", "", "faithfulness,nope"):
+        with pytest.raises(SystemExit):
+            scores.parse_metrics(bad)
+    store = {"question_ids": ["q01"], "scores": {"a": {"faithfulness": {"q01": 0.5}}}}
+    assert scores.pending(store, ["a"], ["faithfulness"]) == []
+    assert scores.pending(store, ["a"], ["answer_relevancy"]) == [("answer_relevancy", "a", "q01")]
+    assert len(scores.pending(store, ["a"])) == 3  # default: everything not yet scored
+
+
 def test_store_refuses_to_mix_judges_or_question_sets(tmp_path):
     path = str(tmp_path / "s.json")
     store = scores.load_store(["q01"], 42, path)

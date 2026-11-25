@@ -28,6 +28,19 @@ def select_subset(questions: list[dict], n: int | None, seed: int = DEFAULT_SEED
     return [q for i, q in enumerate(questions) if i in picked]
 
 
+def parse_metrics(text: str | None) -> list[str]:
+    """"answer_relevancy,faithfulness" -> names in scoring order. None means all four.
+    Scores are stored under their metric name, so runs with different --metrics
+    fill separate slots of the same store."""
+    if text is None:
+        return list(METRIC_NAMES)
+    wanted = {name.strip() for name in text.split(",") if name.strip()}
+    unknown = wanted - set(METRIC_NAMES)
+    if unknown or not wanted:
+        raise SystemExit(f"Unknown or empty --metrics {text!r}. Choose from: {', '.join(METRIC_NAMES)}")
+    return [m for m in METRIC_NAMES if m in wanted]
+
+
 def load_store(question_ids: list[str], seed: int, path: str = SCORES_PATH) -> dict:
     """Loads saved scores. Refuses to continue if they came from another judge
     model or another question set: those averages must not be mixed."""
@@ -51,10 +64,10 @@ def save_store(store: dict, path: str = SCORES_PATH) -> None:
     os.replace(path + ".tmp", path)
 
 
-def pending(store: dict, runs: list[str]) -> list[tuple[str, str, str]]:
+def pending(store: dict, runs: list[str], metrics: list[str] = METRIC_NAMES) -> list[tuple[str, str, str]]:
     """(metric, run, question_id) still to score, in scoring order. A saved null
     (the judge produced no score) counts as done, so it is not paid for twice."""
-    return [(m, run, qid) for m in METRIC_NAMES for run in runs for qid in store["question_ids"]
+    return [(m, run, qid) for m in metrics for run in runs for qid in store["question_ids"]
             if qid not in store["scores"].get(run, {}).get(m, {})]
 
 

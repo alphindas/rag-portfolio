@@ -29,7 +29,7 @@ Question -> Hybrid retrieval (BM25 + vectors, fused with RRF)
 | Pipeline | `pipeline.py`, `main.py` | Chains search, rerank and generation, and frees the embedding model and reranker from GPU memory before the LLM loads. `main.py` is the command-line interface. |
 | Generation | `generate/answer.py` | Sends the chunks to a local Ollama model as numbered context and asks it to cite `[n]` for each claim. |
 | Tracing | `observability/` | `tracer.py` times each stage (bm25, vector, fusion, rerank, generate) and writes one JSON line per query to `logs/traces.jsonl`. `python -m observability.metrics` prints p50/p95 per stage. `generate/citations.py` checks `[n]` citations in code. |
-| Evaluation | `eval/` | Scores answers with RAGAS (see below). |
+| Evaluation | `eval/` | Scores retrieval against gold evidence and answers with RAGAS (see below). |
 
 **Why plain Python?** No LangChain or LlamaIndex for the core pipeline. Every step is written out so it can be read and explained line by line.
 
@@ -45,15 +45,44 @@ The eval is a two-step process, because the 4 GB GPU cannot hold the embedding m
 
 1. `eval/run_retrieval.py` runs four setups for every question and saves the ranked chunks to `eval/retrieved.json`: **(a)** BM25 only, **(b)** vector only, **(c)** hybrid RRF, **(d)** hybrid + reranker, plus the BM25-weighted versions of (c) and (d).
 2. `eval/ablation.py` computes the free retrieval metrics (hit rate@k, recall@k, MRR) for all setups, with no LLM, and writes `eval/ablation_results.csv` (the numbers from before headers/weighting are kept in `eval/ablation_results_baseline.csv`). `eval/ablate_headers.py` splits the gain between the two retrieval changes.
-3. `eval/run_eval.py` generates answers for the two hybrid setups (`hybrid_weighted@2` and `hybrid_weighted_rerank@2`: BM25-weighted, without and with reranker, k=2 chunks; cached in `eval/generated.json`, `--generate-only` stops before any Groq call), then scores them with RAGAS:
+3. `eval/run_eval.py` generates answers for the two hybrid setups (`hybrid_weighted@2` and `hybrid_weighted_rerank@2`: BM25-weighted, without and with reranker, k=2 chunks; cached in `eval/generated.json`, `--generate-only` stops before any Groq call), then scores them with RAGAS. **This run uses the LLM judge for two metrics only:**
    - **Faithfulness**: is the answer supported by the retrieved text?
-   - **Answer (response) relevancy**: does the answer address the question?
-   - **Context precision**: are the retrieved chunks relevant?
-   - **Context recall**: did retrieval find what was needed?
+   - **Answer (response) relevancy**: does the answer address the question? (It can penalize correct refusals, see [Known limitations](#known-limitations-and-findings).)
 
-Each metric is scored for **both** setups before the next one starts, in the order above. Every score is saved as soon as it arrives (`eval/ragas_scores.json`, also written as a table to `eval/results.csv`), so a rate-limit stop loses nothing. A per-minute limit waits and retries; a daily limit stops the script, and the same command continues later. Averages appear in `python -m eval.ablation` only once all questions of a setup are scored for that metric. Re-run it after any step to refresh the tables.
+   The script can also score RAGAS **context precision** and **context recall**, but they are **not LLM-scored in this run**: retrieval quality is already measured against gold evidence (Hit@k, Recall@k, MRR), which is deterministic and cheaper. `--metrics` picks what to score (default: all four).
+
+Each metric is scored for **both** setups before the next one starts, faithfulness first. Scores are stored per setup, metric and question, so running with different `--metrics` fills separate slots and never rescores or overwrites another metric. Every score is saved as soon as it arrives (`eval/ragas_scores.json`, also written as a table to `eval/results.csv`), so a rate-limit stop loses nothing. A per-minute limit waits and retries; a daily limit stops the script, and the same command continues later. Averages appear in `python -m eval.ablation` only once all questions of a setup are scored for that metric. Re-run it after any step to refresh the tables.
 
 **Judge model: `openai/gpt-oss-20b` on Groq's free tier**, the same for both setups (RAGAS needs an LLM to grade answers), with local BGE embeddings for the relevancy metric. The model name is stored in `eval/ragas_scores.json`, `eval/results.csv` and `eval/ablation_results.csv`, and the script refuses to add scores from a different judge or question set to an existing file.
+
+### Judge cost and commands
+
+Estimates for both setups on the 30 questions. Input tokens are counted from the RAGAS prompts; output tokens (including the model's hidden reasoning) are assumed to be 250 / 500 / 1,000 per call.
+
+| Metric | Judge calls | Low | Expected | High |
+|---|---|---|---|---|
+| 1. Faithfulness | 120 | 146k | 176k | 236k |
+| 2. Answer relevancy | 60 | 41k | 56k | 86k |
+| **Total** | **180** | **187k** | **232k** | **322k** |
+
+At 200,000 tokens per day: faithfulness should fit in day 1 (2 days in the high case), and both metrics should be done on day 2.
+
+```bash
+# no Groq calls: cost estimate, then the questions and progress
+python -m eval.estimate_cost --subset 30 --seed 42 --metrics faithfulness,answer_relevancy
+python -m eval.run_eval --subset 30 --seed 42 --metrics faithfulness,answer_relevancy --list
+
+# 1) faithfulness first (uses Groq)
+python -m eval.run_eval --subset 30 --seed 42 --metrics faithfulness
+
+# 2) when faithfulness is complete: answer relevancy (uses Groq)
+python -m eval.run_eval --subset 30 --seed 42 --metrics answer_relevancy
+
+# tables, no Groq calls
+python -m eval.ablation
+```
+
+If the daily limit stops a command, run the same command again after the quota resets.
 
 ### The 30-question subset
 
@@ -121,7 +150,8 @@ These are written down on purpose. A project that hides its problems cannot be t
 - **Falcon-1 injury question is an inference, not a lookup.** Neither report says "no injuries" (Day 12: "no lost-time incidents", Day 13: "no incidents or near-misses"). The model says "no mention of anyone being injured" even when it is given both correct reports. Retrieval finds both chunks, so this is a reading weakness. It has its own category (`inference`) and was not tuned for.
 - **Section labels are approximate.** A chunk's section label comes from its first block, so a chunk that spans several sections names only the first. Some citations name the wrong section.
 - **The CLI reloads models on every question** (see [Latency](#latency)). The app avoids this by parking the models in RAM, but the LLM still has to unload after each answer so retrieval fits on the GPU, so generation always includes loading it.
-- **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day. Scoring both setups on the 30 questions with all 4 metrics is estimated at about 570,000 tokens (range 480,000-750,000, because the judge's output length is not known beforehand), so about 3 days. `python -m eval.estimate_cost --subset 30` prints the breakdown without calling Groq.
+- **Context precision and context recall are not LLM-scored in this run.** Retrieval quality is measured against gold evidence instead (Hit@k, Recall@k, MRR), which is deterministic and cheaper. These are not the same numbers as the RAGAS metrics: they check whether the gold evidence was retrieved and how high it ranked, not how much of the retrieved text is irrelevant. They also cover all 40 answerable questions, not the 30-question subset.
+- **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day. The two-metric plan (both setups, 30 questions) is estimated at about 232,000 tokens (range 187,000-322,000, because the judge's output length is not known beforehand), so expect 2 days (see [Judge cost and commands](#judge-cost-and-commands)). All four metrics would be about 567,000.
 - **Answer relevancy penalizes correct refusals.** RAGAS scores an answer 0 on this metric when the judge calls it noncommittal, which is likely for "Not documented in the provided context." even when that is right. On the subset, 9 answers of hybrid and 8 of hybrid + reranker are such declines, so read this metric with that in mind.
 - **The eval set is small.** 45 questions (40 with gold chunks): one question moves a hit rate by 2.5 points, and results on subsets of 4-10 questions are only indicative.
 - **Synthetic data.** The reports are generated from templates, so wording is far more regular than real field reports.
@@ -201,7 +231,7 @@ On the host, Ollama must accept connections from the container: start it with `O
 
 ## Results
 
-> **Pending.** The final table (RAGAS: faithfulness, answer relevancy, context precision, context recall for hybrid and hybrid + reranker, k=2, on the 30-question subset, judge `openai/gpt-oss-20b` on Groq) is not written yet. It waits for the Groq daily quota; see `eval/run_eval.py`. The retrieval-only results above do not need Groq and are final for this corpus.
+> **Pending.** The final table (RAGAS faithfulness and answer relevancy for hybrid and hybrid + reranker, k=2, on the 30-question subset, judge `openai/gpt-oss-20b` on Groq; retrieval quality comes from Hit@k, Recall@k and MRR) is not written yet. It waits for the Groq daily quota; see `eval/run_eval.py`. The retrieval-only results above do not need Groq and are final for this corpus.
 
 <!-- RESULTS-TABLE-PLACEHOLDER: replace this block with the RAGAS table from `python -m eval.ablation` -->
 
@@ -264,9 +294,9 @@ Run the evaluation (run from the repo root):
 ```bash
 python -m eval.run_retrieval     # GPU: embedder + reranker, then exits
 python -m eval.ablation          # free retrieval metrics, no LLM
-python -m eval.estimate_cost --subset 30     # judge token estimate, no API calls
-python -m eval.run_eval --subset 30 --list   # the 30 questions and scoring progress, no API calls
-python -m eval.run_eval --subset 30          # Ollama generation + Groq-judged RAGAS (needs GROQ_API_KEY)
+# Ollama generation + Groq-judged RAGAS (needs GROQ_API_KEY); see "Judge cost and commands"
+python -m eval.run_eval --subset 30 --seed 42 --metrics faithfulness
+python -m eval.run_eval --subset 30 --seed 42 --metrics answer_relevancy
 python -m eval.ablation          # table again, now including RAGAS
 ```
 
