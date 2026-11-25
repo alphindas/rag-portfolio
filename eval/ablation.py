@@ -1,7 +1,7 @@
 # eval/ablation.py
 """
 Builds the ablation table from eval/retrieved.json (step 1) and, if it
-exists, eval/results.csv (RAGAS scores from run_eval.py). No models, no
+exists, eval/ragas_scores.json (RAGAS scores from run_eval.py). No models, no
 API calls: safe to run any time.
 
     python -m eval.ablation
@@ -17,6 +17,7 @@ import pandas as pd
 
 from generate.citations import check_citations
 from eval.retrieval_metrics import doc_hit_at_k, gold_ranks, hit_at_k, recall_at_k, reciprocal_rank
+from eval.scores import METRIC_NAMES as RAGAS_COLS, SCORES_PATH
 
 SETUPS = {"bm25": "BM25 only", "vector": "Vector only", "hybrid": "Hybrid (RRF)",
           "hybrid_rerank": "Hybrid + reranker", "hybrid_weighted": "Hybrid, BM25-weighted",
@@ -25,7 +26,6 @@ BASELINE_PATH = "eval/ablation_results_baseline.csv"            # before context
 BASELINE_CAT_PATH = "eval/ablation_by_category_baseline.csv"
 CAT_PATH = "eval/ablation_by_category.csv"
 KS = (2, 3)  # how many chunks go to the LLM
-RAGAS_COLS = ["faithfulness", "answer_relevancy", "llm_context_precision_without_reference", "context_recall"]
 OUT_PATH = "eval/ablation_results.csv"
 
 
@@ -51,7 +51,18 @@ def citation_stats(answers: dict, k: int) -> dict:
             "cite_invalid_rate": rate("invalid"), "avg_citations": sum(c["n_cited"] for c in checks) / n}
 
 
-def build_rows(retrieved: list[dict], results: pd.DataFrame | None, generated: dict) -> list[dict]:
+def ragas_means(store: dict | None, run: str) -> dict:
+    """Average per metric, only once every question of the subset has been tried,
+    so a half-scored run is never compared with a full one."""
+    metrics = store["scores"].get(run, {}) if store else {}
+    n = len(store["question_ids"]) if store else 0
+    row = {col: mean(list(metrics[col].values())) if len(metrics.get(col, {})) == n and n else None
+           for col in RAGAS_COLS}
+    scored = any(v is not None for v in row.values())
+    return {**row, "judge_model": store["judge_model"] if scored else None, "ragas_n": n if scored else None}
+
+
+def build_rows(retrieved: list[dict], store: dict | None, generated: dict) -> list[dict]:
     answerable = [q for q in retrieved if q["evidence"]]  # "not documented" has no gold chunk
     rows = []
     for setup, label in SETUPS.items():
@@ -60,13 +71,10 @@ def build_rows(retrieved: list[dict], results: pd.DataFrame | None, generated: d
             row = {"setup": label, "k": k, "n_questions": len(answerable),
                    "hit_at_k": mean([x["hit"] for x in s]), "doc_hit_at_k": mean([x["doc_hit"] for x in s]),
                    "recall_at_k": mean([x["recall"] for x in s]), "mrr": mean([x["rr"] for x in s])}
-            run = results[results["run"] == f"{setup}@{k}"] if results is not None else None
             answers = generated.get(f"{setup}@{k}")
             row.update(citation_stats(answers, k) if answers else
                        dict.fromkeys(["cite_ok_rate", "cite_none_rate", "cite_invalid_rate", "avg_citations"]))
-            for col in RAGAS_COLS:
-                has = run is not None and col in run and run[col].notna().any()
-                row[col] = mean(run[col].tolist()) if has else None
+            row.update(ragas_means(store, f"{setup}@{k}"))
             rows.append(row)
     return rows
 
@@ -161,10 +169,10 @@ def print_watch_list(retrieved: list[dict]) -> None:
 
 def main():
     retrieved = json.load(open("eval/retrieved.json"))
-    results = pd.read_csv("eval/results.csv") if os.path.exists("eval/results.csv") else None
+    store = json.load(open(SCORES_PATH)) if os.path.exists(SCORES_PATH) else None
 
     generated = json.load(open("eval/generated.json")) if os.path.exists("eval/generated.json") else {}
-    rows = build_rows(retrieved, results, generated)
+    rows = build_rows(retrieved, store, generated)
     pd.DataFrame(rows).to_csv(OUT_PATH, index=False)
 
     n = rows[0]["n_questions"]
@@ -179,9 +187,10 @@ def main():
     print_before_after(rows, cats)
     print_subsets(retrieved)
 
-    scored = [r for r in rows if r["faithfulness"] is not None]
+    scored = [r for r in rows if r["judge_model"]]
     if scored:
-        print("\n### RAGAS (LLM-judged, average over all questions in the run)\n")
+        print(f"\n### RAGAS (judge: {store['judge_model']}; same {len(store['question_ids'])} questions for every run; "
+              "'-' = not fully scored yet)\n")
         print(markdown_table(scored, {"setup": "Setup", "k": "k", "faithfulness": "Faithfulness",
                                       "answer_relevancy": "Answer relevancy",
                                       "llm_context_precision_without_reference": "Ctx precision",

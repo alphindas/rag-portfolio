@@ -10,24 +10,33 @@ hybrid and hybrid+reranker, each with k=2 and k=3. (BM25-only and
 vector-only are compared on the free retrieval metrics only, to save the
 Groq quota.)
 
-Saved incrementally, so hitting a Groq quota wall loses nothing:
+Both runs are scored by the same judge model (eval/scores.py: JUDGE_MODEL).
+Order: each metric for ALL runs, then the next metric (faithfulness and answer
+relevancy first), so a quota stop still leaves a fair comparison.
+
+Saved after EVERY question, so hitting a Groq quota wall loses nothing:
   - eval/generated.json: answers, {run: {question_id: {"answer": ...}}}.
     A rerun reuses them (local generation is slow).
-  - eval/results.csv: one row per (run, question), one RAGAS metric column
-    at a time. A rerun skips metrics already complete for a run.
+  - eval/ragas_scores.json: judge model, question ids and scores. A rerun
+    skips everything already scored.
+  - eval/results.csv: the same scores as a table.
+
+Rate limits: a per-minute limit waits and retries; a daily limit stops the
+script. Run the same command again after the quota resets.
 
 Run AFTER `python -m eval.run_retrieval`:
-    python -m eval.run_eval
-    python -m eval.run_eval --runs hybrid_rerank@2     # just one run
+    python -m eval.run_eval --subset 30
+    python -m eval.run_eval --subset 30 --list        # show the subset and progress, no Groq calls
 """
 import argparse
 import json
+import math
 import os
+import subprocess
 import time
 
 import ollama
-import pandas as pd
-
+from eval import scores as store_lib
 from eval.ragas_judge import get_evaluator_llm, get_evaluator_embeddings
 
 from ragas import evaluate
@@ -45,8 +54,10 @@ from generate.citations import check_citations
 from observability.tracer import Trace
 
 GENERATED_PATH = "eval/generated.json"
-RESULTS_PATH = "eval/results.csv"
 DEFAULT_RUNS = ["hybrid_weighted@2", "hybrid_weighted_rerank@2"]  # k=2 only: Groq free-tier quota
+
+MAX_RATE_LIMIT_WAITS = 6    # per question, for per-minute limits
+MAX_FAILURES_IN_A_ROW = 3   # other errors: skip the question, but give up if they keep coming
 
 METRICS = {
     "faithfulness": Faithfulness,
@@ -99,59 +110,99 @@ def generate_for_run(retrieved: list[dict], run: str, generated: dict) -> dict:
     return answers
 
 
-def build_dataset(retrieved: list[dict], run: str, answers: dict) -> EvaluationDataset:
-    return EvaluationDataset(samples=[
-        SingleTurnSample(
-            user_input=q["user_input"],
-            response=answers[q["id"]]["answer"],
-            retrieved_contexts=[c["text"] for c in chunks_for_run(q, run)],
-            reference=q["reference"],
-        )
-        for q in retrieved
-    ])
+def score_one(question: dict, run: str, answer: str, metric_name: str, llm, embeddings, run_config) -> float | None:
+    """One metric for one question. None means the judge produced no score."""
+    sample = SingleTurnSample(
+        user_input=question["user_input"],
+        response=answer,
+        retrieved_contexts=[c["text"] for c in chunks_for_run(question, run)],
+        reference=question["reference"],
+    )
+    result = evaluate(dataset=EvaluationDataset(samples=[sample]), metrics=[METRICS[metric_name]()],
+                      llm=llm, embeddings=embeddings, run_config=run_config,
+                      raise_exceptions=True, show_progress=False)
+    score = float(result.to_pandas()[metric_name].iloc[0])
+    return None if math.isnan(score) else score
 
 
-def load_results() -> pd.DataFrame:
-    if os.path.exists(RESULTS_PATH):
-        return pd.read_csv(RESULTS_PATH)
-    return pd.DataFrame(columns=["run", "id", "category", "user_input", "response", *METRICS])
+def score_with_rate_limit_retry(*args) -> float | None:
+    """Waits out per-minute limits. Daily limits and other errors are raised."""
+    for attempt in range(MAX_RATE_LIMIT_WAITS + 1):
+        try:
+            return score_one(*args)
+        except Exception as e:
+            if not store_lib.is_rate_limit(e) or store_lib.is_daily_limit(e) or attempt == MAX_RATE_LIMIT_WAITS:
+                raise
+            wait = store_lib.retry_wait_seconds(e)
+            print(f"  rate limit, waiting {wait:.0f}s ({attempt + 1}/{MAX_RATE_LIMIT_WAITS})")
+            time.sleep(wait)
 
 
-def set_scores(results: pd.DataFrame, run: str, retrieved: list[dict], answers: dict,
-               metric: str | None = None, scores: list | None = None) -> pd.DataFrame:
-    """Makes sure every question of `run` has a row, and optionally writes one
-    metric's scores (same order as `retrieved`). Rows are found by (run, id),
-    never by question text, so a deliberately repeated question keeps 2 rows."""
-    for q in retrieved:
-        mask = (results["run"] == run) & (results["id"] == q["id"])
-        if not mask.any():
-            results.loc[len(results)] = {"run": run, "id": q["id"], "category": q["category"],
-                                         "user_input": q["user_input"], "response": answers[q["id"]]["answer"]}
-    if metric:
-        for q, score in zip(retrieved, scores):
-            results.loc[(results["run"] == run) & (results["id"] == q["id"]), metric] = score
-    return results
+def score_all(store: dict, runs: list[str], retrieved: list[dict], generated: dict, llm, embeddings, run_config) -> None:
+    by_id = {q["id"]: q for q in retrieved}
+    todo = store_lib.pending(store, runs)
+    print(f"Judge: {store['judge_model']}. {len(todo)} scores to go.")
+    failures = 0
+    for i, (metric_name, run, qid) in enumerate(todo, start=1):
+        try:
+            score = score_with_rate_limit_retry(by_id[qid], run, generated[run][qid]["answer"],
+                                                metric_name, llm, embeddings, run_config)
+        except Exception as e:
+            print(f"[{i}/{len(todo)}] {metric_name} {run} {qid} failed: {e}")
+            failures += 1
+            if store_lib.is_rate_limit(e) or failures == MAX_FAILURES_IN_A_ROW:
+                print("Stopping. Everything scored so far is saved. Run the same command again later")
+                print("(after the quota resets): it continues from here.")
+                return
+            continue  # left unscored, so the next run tries it again
+        failures = 0
+        store["scores"].setdefault(run, {}).setdefault(metric_name, {})[qid] = score
+        store_lib.save_store(store)
+        store_lib.results_table(store, retrieved, generated).to_csv(store_lib.RESULTS_PATH, index=False)
+        print(f"[{i}/{len(todo)}] {metric_name} {run} {qid}: {'no score' if score is None else f'{score:.2f}'}")
+    left = len(store_lib.pending(store, runs))
+    print(f"{left} scores still missing; run again." if left else "All runs scored. Now run: python -m eval.ablation")
+
+
+def print_progress(store: dict, runs: list[str], subset: list[dict]) -> None:
+    print(f"\nJudge: {store['judge_model']}. {len(subset)} questions (seed {store['seed']}):")
+    for q in subset:
+        print(f"  {q['id']} [{q['category']}] {q['user_input']}")
+    print()
+    for metric_name in METRICS:
+        for run in runs:
+            done = store["scores"].get(run, {}).get(metric_name, {})
+            empty = sum(v is None for v in done.values())
+            print(f"  {metric_name:42s} {run:26s} {len(done)}/{len(subset)}" + (f" ({empty} with no score)" if empty else ""))
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", default=",".join(DEFAULT_RUNS), help="comma-separated, e.g. hybrid@2,hybrid_rerank@3")
+    parser.add_argument("--subset", type=int, help="score only this many questions, picked at random with --seed")
+    parser.add_argument("--seed", type=int, default=store_lib.DEFAULT_SEED, help="seed for --subset (default %(default)s)")
+    parser.add_argument("--list", action="store_true", help="show the questions and scoring progress, then exit")
     parser.add_argument("--generate-only", action="store_true",
                         help="only generate answers with the local LLM; no Groq calls, no RAGAS scoring")
     args = parser.parse_args()
     runs = args.runs.split(",")
 
-    import subprocess
+    retrieved = load_json("eval/retrieved.json", [])
+    subset = store_lib.select_subset(retrieved, args.subset, args.seed)
+    store = store_lib.load_store([q["id"] for q in subset], args.seed)
+    if args.list:
+        print_progress(store, runs, subset)
+        return
+
     print("[gpu check before anything else]")
     print(subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.free", "--format=csv"], capture_output=True, text=True).stdout)
 
-    retrieved = load_json("eval/retrieved.json", [])
-    print(f"Loaded {len(retrieved)} retrieved results.")
+    print(f"Loaded {len(retrieved)} retrieved results, using {len(subset)}.")
     generated = load_json(GENERATED_PATH, {})
 
     # Generate everything first (local, no quota), then spend Groq quota.
     for run in runs:
-        generate_for_run(retrieved, run, generated)
+        generate_for_run(subset, run, generated)
 
     if args.generate_only:
         print("Answers saved to eval/generated.json. Skipping RAGAS (--generate-only).")
@@ -160,39 +211,7 @@ def main():
     evaluator_llm = get_evaluator_llm()
     evaluator_embeddings = get_evaluator_embeddings()
     run_config = RunConfig(max_workers=1, timeout=900, max_retries=8, max_wait=60)  # retries + backoff on rate limits
-
-    results = load_results()
-    for run in runs:
-        answers = generated[run]
-        results = set_scores(results, run, retrieved, answers)
-        rows = results[results["run"] == run]
-        for metric_name, metric_factory in METRICS.items():
-            if rows[metric_name].notna().all():
-                print(f"[{run}] skipping {metric_name} -- already scored")
-                continue
-
-            print(f"[{run}] scoring metric: {metric_name}")
-            try:
-                result = evaluate(
-                    dataset=build_dataset(retrieved, run, answers),
-                    metrics=[metric_factory()],
-                    llm=evaluator_llm,
-                    embeddings=evaluator_embeddings,
-                    run_config=run_config,
-                    raise_exceptions=True,
-                )
-            except Exception as e:
-                print(f"Stopped while scoring {metric_name} for {run}: {e}")
-                print("Everything finished before this point is saved. Rerun later (e.g. after the quota resets):")
-                print("it skips completed metrics and continues from here.")
-                return
-            results = set_scores(results, run, retrieved, answers, metric_name, result.to_pandas()[metric_name].tolist())
-            results.to_csv(RESULTS_PATH, index=False)
-            print(f"[{run}] saved {metric_name} to {RESULTS_PATH}")
-            rows = results[results["run"] == run]
-
-    results.to_csv(RESULTS_PATH, index=False)
-    print("All runs scored. Now run: python -m eval.ablation")
+    score_all(store, runs, retrieved, generated, evaluator_llm, evaluator_embeddings, run_config)
 
 
 if __name__ == "__main__":

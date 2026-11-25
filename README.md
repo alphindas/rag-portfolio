@@ -45,19 +45,55 @@ The eval is a two-step process, because the 4 GB GPU cannot hold the embedding m
 
 1. `eval/run_retrieval.py` runs four setups for every question and saves the ranked chunks to `eval/retrieved.json`: **(a)** BM25 only, **(b)** vector only, **(c)** hybrid RRF, **(d)** hybrid + reranker, plus the BM25-weighted versions of (c) and (d).
 2. `eval/ablation.py` computes the free retrieval metrics (hit rate@k, recall@k, MRR) for all setups, with no LLM, and writes `eval/ablation_results.csv` (the numbers from before headers/weighting are kept in `eval/ablation_results_baseline.csv`). `eval/ablate_headers.py` splits the gain between the two retrieval changes.
-3. `eval/run_eval.py` generates answers for the two hybrid setups (BM25-weighted, with and without reranker) with k=2 chunks (`--generate-only` stops before any Groq call) (cached in `eval/generated.json`), then scores them with RAGAS, one metric at a time into `eval/results.csv`:
+3. `eval/run_eval.py` generates answers for the two hybrid setups (`hybrid_weighted@2` and `hybrid_weighted_rerank@2`: BM25-weighted, without and with reranker, k=2 chunks; cached in `eval/generated.json`, `--generate-only` stops before any Groq call), then scores them with RAGAS:
    - **Faithfulness**: is the answer supported by the retrieved text?
-   - **Response relevancy**: does the answer address the question?
+   - **Answer (response) relevancy**: does the answer address the question?
    - **Context precision**: are the retrieved chunks relevant?
    - **Context recall**: did retrieval find what was needed?
 
-Scores are saved metric by metric, so a rate-limit interruption does not lose finished work. Re-run `python -m eval.ablation` after any step to refresh the tables.
+Each metric is scored for **both** setups before the next one starts, in the order above. Every score is saved as soon as it arrives (`eval/ragas_scores.json`, also written as a table to `eval/results.csv`), so a rate-limit stop loses nothing. A per-minute limit waits and retries; a daily limit stops the script, and the same command continues later. Averages appear in `python -m eval.ablation` only once all questions of a setup are scored for that metric. Re-run it after any step to refresh the tables.
 
-**Judge model:** Groq's free tier (RAGAS needs an LLM to grade answers), with local BGE embeddings for the relevancy metric.
+**Judge model: `openai/gpt-oss-20b` on Groq's free tier**, the same for both setups (RAGAS needs an LLM to grade answers), with local BGE embeddings for the relevancy metric. The model name is stored in `eval/ragas_scores.json`, `eval/results.csv` and `eval/ablation_results.csv`, and the script refuses to add scores from a different judge or question set to an existing file.
 
-Results: see `eval/results.csv`.
+### The 30-question subset
 
-<!-- TODO: paste the latest average scores per metric here once you are happy with a run -->
+To save quota, RAGAS runs on 30 of the 45 questions: `--subset 30`, a random sample with fixed seed 42 (not stratified, so category counts are uneven; for example, the `inference` question is not in it). Free retrieval metrics still use all 40 answerable questions.
+
+<details>
+<summary>The 30 questions</summary>
+
+1. `q01` (single_fact) What was the mud weight on Condor-7 on Day 4?
+2. `q02` (single_fact) What was the average rate of penetration on Falcon-1 Day 12?
+3. `q03` (similar_wells) Was anyone injured on Condor-7?
+4. `q06` (single_fact) Which well experienced downtime due to a cementing unit delay?
+5. `q07` (single_fact) What safety incident occurred on Falcon-1 Day 12?
+6. `q08` (single_fact) What was Falcon-1's mud weight on Day 13, and why was it increased?
+7. `q09` (repeat) What was Falcon-1's mud weight on Day 13, and why was it increased?
+8. `q14` (similar_wells) What was the mud weight on Condor-9 on Day 4?
+9. `q15` (similar_wells) What was the average rate of penetration on Falcon-3 Day 12?
+10. `q16` (similar_wells) What was the mud weight on Falcon-3 on Day 12?
+11. `q17` (similar_wells) What was Harrier-2's mud weight on Day 2?
+12. `q18` (similar_wells) Who prepared the Condor-9 report for Day 6?
+13. `q20` (multi_hop) How many hours of non-productive time did Osprey-5 record in total on Day 8 and Day 9?
+14. `q21` (multi_hop) Which day had the higher rate of penetration on Condor-9, Day 4 or Day 5, and by how much?
+15. `q23` (not_documented) What was the H2S level recorded on Osprey-5?
+16. `q26` (not_documented) What was the hole inclination at the end of Kestrel-4 Day 18?
+17. `q27` (keyword) Which well and day used bit serial number BS-85748?
+18. `q28` (keyword) What caused the downtime recorded under work order WO-98389?
+19. `q30` (keyword) Which well and day reached a depth of 10,955 ft?
+20. `q31` (keyword_holdout) Which well and day used bit serial number BS-67080?
+21. `q32` (keyword_holdout) Which report is work order WO-17861 in, and what was the cause?
+22. `q35` (keyword_holdout) Which report states an average rate of penetration of 20.9 ft/hr?
+23. `q36` (keyword_holdout) Which report lists a mud weight of 12.1 ppg?
+24. `q38` (hard) Which was drilling faster on Day 12, Falcon-1 or Falcon-3?
+25. `q39` (hard) Which had the higher funnel viscosity on Day 12, Falcon-1 or Falcon-3?
+26. `q40` (hard) Which had the higher chlorides on Day 13, Falcon-1 or Falcon-3?
+27. `q41` (hard) Which had the higher mud weight on Day 5, Condor-7 or Condor-9?
+28. `q42` (hard) What was the combined non-productive time of Falcon-1 and Falcon-3 on Day 12?
+29. `q43` (hard) How many rig crew were on site in total on Day 12, counting Falcon-1 and Falcon-3?
+30. `q44` (hard) By how much did Kestrel-4's mud weight change between Day 16 and Day 19?
+
+</details>
 
 ---
 
@@ -81,11 +117,12 @@ These are written down on purpose. A project that hides its problems cannot be t
 
 **Still open**
 
-- **Small local model.** The machine has 4 GB of VRAM, so generation uses `llama3.2:3b`. Llama 3.1 8B ran out of memory, and a smaller model (`phi`) hallucinated badly. The 3B model sometimes leaves the `[n]` citation off; the citation checker flags these (see the eval output and `main.py` warnings). Missing-citation rate on the cached eval answers (45 questions per setup, k=2): **hybrid 2/45 (4.4%), hybrid + reranker 2/45 (4.4%)**. Proper "Not documented" declines (13 and 15) need no citation; leaving them out, the rates are 2/32 (6.2%) and 2/30 (6.7%). No answer cites a number that does not exist. This is under the 20% threshold set for adding a citation retry, so there is none.
+- **Small local model.** The machine has 4 GB of VRAM, so generation uses `llama3.2:3b`. Llama 3.1 8B ran out of memory, and a smaller model (`phi`) hallucinated badly. The 3B model sometimes leaves the `[n]` citation off; the citation checker flags these (see the eval output and `main.py` warnings). Missing-citation rate on the cached eval answers (45 questions per setup, k=2; on the 30-question RAGAS subset it is 1/30, 3.3%, for each): **hybrid 2/45 (4.4%), hybrid + reranker 2/45 (4.4%)**. Proper "Not documented" declines (13 and 15) need no citation; leaving them out, the rates are 2/32 (6.2%) and 2/30 (6.7%). No answer cites a number that does not exist. This is under the 20% threshold set for adding a citation retry, so there is none.
 - **Falcon-1 injury question is an inference, not a lookup.** Neither report says "no injuries" (Day 12: "no lost-time incidents", Day 13: "no incidents or near-misses"). The model says "no mention of anyone being injured" even when it is given both correct reports. Retrieval finds both chunks, so this is a reading weakness. It has its own category (`inference`) and was not tuned for.
 - **Section labels are approximate.** A chunk's section label comes from its first block, so a chunk that spans several sections names only the first. Some citations name the wrong section.
 - **The CLI reloads models on every question** (see [Latency](#latency)). The app avoids this by parking the models in RAM, but the LLM still has to unload after each answer so retrieval fits on the GPU, so generation always includes loading it.
-- **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day, and scoring one run (30 questions, 4 metrics) uses about that much. `eval/run_eval.py` resumes where it stopped.
+- **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day. Scoring both setups on the 30 questions with all 4 metrics is estimated at about 570,000 tokens (range 480,000-750,000, because the judge's output length is not known beforehand), so about 3 days. `python -m eval.estimate_cost --subset 30` prints the breakdown without calling Groq.
+- **Answer relevancy penalizes correct refusals.** RAGAS scores an answer 0 on this metric when the judge calls it noncommittal, which is likely for "Not documented in the provided context." even when that is right. On the subset, 9 answers of hybrid and 8 of hybrid + reranker are such declines, so read this metric with that in mind.
 - **The eval set is small.** 45 questions (40 with gold chunks): one question moves a hit rate by 2.5 points, and results on subsets of 4-10 questions are only indicative.
 - **Synthetic data.** The reports are generated from templates, so wording is far more regular than real field reports.
 
@@ -164,7 +201,7 @@ On the host, Ollama must accept connections from the container: start it with `O
 
 ## Results
 
-> **Pending.** The final table (RAGAS: faithfulness, answer relevancy, context precision, context recall for hybrid and hybrid + reranker, k=2) is not written yet. It waits for the Groq daily quota; see `eval/run_eval.py`. The retrieval-only results above do not need Groq and are final for this corpus.
+> **Pending.** The final table (RAGAS: faithfulness, answer relevancy, context precision, context recall for hybrid and hybrid + reranker, k=2, on the 30-question subset, judge `openai/gpt-oss-20b` on Groq) is not written yet. It waits for the Groq daily quota; see `eval/run_eval.py`. The retrieval-only results above do not need Groq and are final for this corpus.
 
 <!-- RESULTS-TABLE-PLACEHOLDER: replace this block with the RAGAS table from `python -m eval.ablation` -->
 
@@ -227,7 +264,9 @@ Run the evaluation (run from the repo root):
 ```bash
 python -m eval.run_retrieval     # GPU: embedder + reranker, then exits
 python -m eval.ablation          # free retrieval metrics, no LLM
-python -m eval.run_eval          # Ollama generation + Groq-judged RAGAS (needs GROQ_API_KEY)
+python -m eval.estimate_cost --subset 30     # judge token estimate, no API calls
+python -m eval.run_eval --subset 30 --list   # the 30 questions and scoring progress, no API calls
+python -m eval.run_eval --subset 30          # Ollama generation + Groq-judged RAGAS (needs GROQ_API_KEY)
 python -m eval.ablation          # table again, now including RAGAS
 ```
 
@@ -254,4 +293,4 @@ python -m eval.ablation          # table again, now including RAGAS
 
 ## Tech stack
 
-Python, ChromaDB, `rank_bm25`, `sentence-transformers` (BGE embeddings and reranker), Ollama (`llama3.2:3b`), RAGAS, Groq (judge).
+Python, ChromaDB, `rank_bm25`, `sentence-transformers` (BGE embeddings and reranker), Ollama (`llama3.2:3b`), RAGAS, Groq (judge: `openai/gpt-oss-20b`).
