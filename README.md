@@ -6,6 +6,43 @@ It answers questions from a small set of drilling-report style documents, cites 
 
 > **Status:** retrieval, reranking, cited generation and evaluation are working. Tracing, latency metrics and a code-level citation checker are working; CI regression gating is still to do (see [Roadmap](#roadmap)).
 
+> **Key results**
+> - **Hit@2 on 40 answerable questions: plain hybrid 0.68 -> BM25-weighted hybrid + reranker 1.00** (chunk headers are on in both): BM25 weighting lifts it to 0.80, and adding the reranker takes it to 1.00.
+> - **RAGAS faithfulness** (30 questions, judge gpt-oss-20b): 0.84 without and 0.88 with the reranker. No measurable difference; the judge is noisy.
+> - **The eval caught a hidden bug:** prompts were being silently cut off. It is [now fixed and guarded](#the-eval-caught-a-hidden-bug-prompts-were-being-cut-off).
+> - **Runs locally on a 4 GB GPU** (only the eval judge is hosted), in plain Python: no LangChain or LlamaIndex in the core pipeline.
+> - Read the [Known limitations](#known-limitations-and-findings) before quoting any number.
+
+---
+
+## Demo app
+
+```bash
+streamlit run app.py          # needs Ollama running locally
+```
+
+Type a question to see the answer, the cited chunks in expandable boxes (cited ones open by default), and per-stage timing. The sidebar toggle turns the reranker off, so you can see it matter live: for "What was the mud weight on Condor-9 on Day 5?" the reranker on finds the right report; off, hybrid search alone returns the look-alike Condor-7 report and the model answers "Not documented".
+
+The embedder and reranker are loaded once and kept in RAM; they move to the GPU only while retrieving, then step aside so the LLM fits in 4 GB (measured: both on the GPU use 1.4 GB, which leaves too little for Ollama).
+
+![Reranker on](docs/images/reranker-on.png)
+*Reranker on: both retrieved chunks come from the right report (Condor-9, Day 5) and the answer cites [1]. Reranking took about 0.5 s in this single run.*
+
+![Reranker off](docs/images/reranker-off.png)
+*Reranker off, same question: hybrid search alone returns a look-alike report (Condor-7, Day 5) and a different day of Condor-9, so the model correctly says "Not documented in the provided context." Single runs; see the Latency table for typical timings.*
+
+### Docker
+
+Ollama runs on the **host**, not in the container. The image holds the app, the models and the index (CPU-only PyTorch, so the embedder and reranker run on the CPU inside the container; the LLM still uses your GPU through the host's Ollama).
+
+```bash
+docker build -t rag-portfolio .
+docker run --rm -p 8501:8501 --add-host=host.docker.internal:host-gateway rag-portfolio
+# then open http://localhost:8501
+```
+
+On the host, Ollama must accept connections from the container: start it with `OLLAMA_HOST=0.0.0.0 ollama serve` (by default it only listens on localhost). `OLLAMA_HOST` inside the container defaults to `http://host.docker.internal:11434`. `.env` is excluded from the image.
+
 ---
 
 ## How it works
@@ -32,6 +69,25 @@ Question -> Hybrid retrieval (BM25 + vectors, fused with RRF)
 | Evaluation | `eval/` | Scores retrieval against gold evidence and answers with RAGAS (see below). |
 
 **Why plain Python?** No LangChain or LlamaIndex for the core pipeline. Every step is written out so it can be read and explained line by line.
+
+---
+
+## Results
+
+**RAGAS faithfulness.** Judge: `openai/gpt-oss-20b` on Groq. Same 30 questions for both setups (seed 42), k=2.
+
+| Setup | Faithfulness (30 questions) | Hit@2 | Recall@2 | MRR |
+|---|---|---|---|---|
+| BM25-weighted hybrid | 0.84 | 0.80 | 0.70 | 0.79 |
+| BM25-weighted hybrid + reranker | 0.88 | 1.00 | 0.96 | 0.96 |
+
+Hit@2, Recall@2 and MRR are computed against gold evidence on all 40 answerable questions, with no LLM.
+
+- **Faithfulness shows no measurable difference** between the two setups: 0.84 vs 0.88 is about one question and within the judge's noise. **The retrieval metrics show the reranker's advantage.**
+- **Answer relevancy was not run** (it can score 0 on a correct "Not documented" answer).
+- **Context precision and context recall are not LLM-scored**, because retrieval is measured against gold evidence.
+
+Sources: `eval/ragas_scores.json`, `eval/results.csv`, `eval/ablation_results.csv`. See [Known limitations](#known-limitations-and-findings) before quoting the scores.
 
 ---
 
@@ -123,6 +179,50 @@ To save quota, RAGAS runs on 30 of the 45 questions: `--subset 30`, a random sam
 
 ---
 
+## What each retrieval change contributed
+
+The 2x2 below isolates the two changes (context headers on chunks, BM25-weighted RRF) on the 40 answerable questions (`python -m eval.ablate_headers`). "Keyword Hit@3" covers all 10 keyword questions.
+
+Without the reranker:
+
+| Variant | Hit@2 | Hit@3 | Recall@3 | MRR | Keyword Hit@3 |
+|---|---|---|---|---|---|
+| neither | 0.65 | 0.70 | 0.59 | 0.65 | 0.30 |
+| weighting only | 0.75 | 0.82 | 0.71 | 0.73 | 0.80 |
+| headers only | 0.68 | 0.82 | 0.71 | 0.71 | 0.60 |
+| **both** | **0.80** | **0.90** | **0.79** | **0.79** | **0.90** |
+
+With the reranker:
+
+| Variant | Hit@2 | Hit@3 | Recall@3 | MRR | Keyword Hit@3 |
+|---|---|---|---|---|---|
+| neither | 0.88 | 0.88 | 0.80 | 0.84 | 0.70 |
+| weighting only | 0.95 | 0.95 | 0.88 | 0.91 | 1.00 |
+| headers only | 0.95 | 0.95 | 0.94 | 0.93 | 0.80 |
+| **both** | **1.00** | **1.00** | **0.99** | **0.96** | **1.00** |
+
+Reading it: each change helps on its own, the gains roughly add up, and the reranker adds a large gain on top of either. Headers help most when the answer sits in the second chunk of a long report (Recall@3 0.80 -> 0.94 with the reranker); weighting helps most on exact-ID questions.
+
+**Hard questions** (9 questions that need two wells or two days; Recall counts both pieces of evidence): plain hybrid reaches Recall@2 0.50 and Recall@3 0.61; hybrid + reranker reaches 0.83 and 0.94. At k=2 the reranker still misses some second pieces of evidence, so k=3 is safer for multi-hop questions.
+
+---
+
+## Latency
+
+Cold and warm are measured separately (`python scripts/measure_latency.py`, p50 / p95 in ms). Measured on this laptop (4 GB GPU) on 25 Nov 2026. Earlier measurements were slower. A single p95 over all queries would be dominated by model loading, so it would mislead.
+
+| Stage | Cold: CLI, models reloaded every question (n=3) | Warm: app, models loaded once (n=10) |
+|---|---|---|
+| BM25 | 6 / 16 | 4 / 25 |
+| Vector search | 2,742 / 4,376 | 32 / 76 |
+| Rerank | 6,953 / 8,759 | 352 / 360 |
+| Generate (LLM) | 5,935 / 6,244 | 4,665 / 6,503 |
+| **Whole question** | **17,123 / 18,130** | **6,327 / 8,409** |
+
+Loading the embedding model and reranker (paid once) took 7.0 s in the latency script and 11.9 s in the app (it varies). Warm retrieval is under 1 s. Generation is the largest warm stage; it includes loading the LLM, because Ollama unloads it after each answer so the next retrieval fits on the GPU. The whole-question time also includes time outside the listed stages. Small samples: treat these as orders of magnitude.
+
+---
+
 ## Known limitations and findings
 
 These are written down on purpose. A project that hides its problems cannot be trusted.
@@ -176,96 +276,6 @@ We looked into low faithfulness scores and found that the model had not read all
 - **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day, so larger evaluations take several days. `eval/run_eval.py` resumes where it stopped.
 - **The eval set is small.** 45 questions (40 with gold chunks): one question moves a hit rate by 2.5 points, and results on subsets of 4-10 questions are only indicative.
 - **Synthetic data.** The reports are generated from templates, so wording is far more regular than real field reports.
-
----
-
-## What each retrieval change contributed
-
-The 2x2 below isolates the two changes (context headers on chunks, BM25-weighted RRF) on the 40 answerable questions (`python -m eval.ablate_headers`). "Keyword Hit@3" covers all 10 keyword questions.
-
-Without the reranker:
-
-| Variant | Hit@2 | Hit@3 | Recall@3 | MRR | Keyword Hit@3 |
-|---|---|---|---|---|---|
-| neither | 0.65 | 0.70 | 0.59 | 0.65 | 0.30 |
-| weighting only | 0.75 | 0.82 | 0.71 | 0.73 | 0.80 |
-| headers only | 0.68 | 0.82 | 0.71 | 0.71 | 0.60 |
-| **both** | **0.80** | **0.90** | **0.79** | **0.79** | **0.90** |
-
-With the reranker:
-
-| Variant | Hit@2 | Hit@3 | Recall@3 | MRR | Keyword Hit@3 |
-|---|---|---|---|---|---|
-| neither | 0.88 | 0.88 | 0.80 | 0.84 | 0.70 |
-| weighting only | 0.95 | 0.95 | 0.88 | 0.91 | 1.00 |
-| headers only | 0.95 | 0.95 | 0.94 | 0.93 | 0.80 |
-| **both** | **1.00** | **1.00** | **0.99** | **0.96** | **1.00** |
-
-Reading it: each change helps on its own, the gains roughly add up, and the reranker adds a large gain on top of either. Headers help most when the answer sits in the second chunk of a long report (Recall@3 0.80 -> 0.94 with the reranker); weighting helps most on exact-ID questions.
-
-**Hard questions** (9 questions that need two wells or two days; Recall counts both pieces of evidence): plain hybrid reaches Recall@2 0.50 and Recall@3 0.61; hybrid + reranker reaches 0.83 and 0.94. At k=2 the reranker still misses some second pieces of evidence, so k=3 is safer for multi-hop questions.
-
----
-
-## Latency
-
-Cold and warm are measured separately (`python scripts/measure_latency.py`, p50 / p95 in ms). Measured on this laptop (4 GB GPU) on 25 Nov 2026. Earlier measurements were slower. A single p95 over all queries would be dominated by model loading, so it would mislead.
-
-| Stage | Cold: CLI, models reloaded every question (n=3) | Warm: app, models loaded once (n=10) |
-|---|---|---|
-| BM25 | 6 / 16 | 4 / 25 |
-| Vector search | 2,742 / 4,376 | 32 / 76 |
-| Rerank | 6,953 / 8,759 | 352 / 360 |
-| Generate (LLM) | 5,935 / 6,244 | 4,665 / 6,503 |
-| **Whole question** | **17,123 / 18,130** | **6,327 / 8,409** |
-
-At app start, loading the embedding model and reranker took 7.0 s (paid once). Warm retrieval is under 1 s. Generation is the largest warm stage; it includes loading the LLM, because Ollama unloads it after each answer so the next retrieval fits on the GPU. The whole-question time also includes time outside the listed stages. Small samples: treat these as orders of magnitude.
-
----
-
-## Demo app
-
-```bash
-streamlit run app.py          # needs Ollama running locally
-```
-
-Type a question to see the answer, the cited chunks in expandable boxes (cited ones open by default), and per-stage timing. The sidebar toggle turns the reranker off, so you can see it matter live: for "What was the mud weight on Condor-9 on Day 5?" the reranker on finds the right report; off, hybrid search alone returns the look-alike Condor-7 report and the model answers "Not documented".
-
-The embedder and reranker are loaded once and kept in RAM; they move to the GPU only while retrieving, then step aside so the LLM fits in 4 GB (measured: both on the GPU use 1.4 GB, which leaves too little for Ollama).
-
-<!-- SCREENSHOT PLACEHOLDER: add docs/app.png and replace this line with ![Streamlit app](docs/app.png) -->
-*(Screenshot to be added.)*
-
-### Docker
-
-Ollama runs on the **host**, not in the container. The image holds the app, the models and the index (CPU-only PyTorch, so the embedder and reranker run on the CPU inside the container; the LLM still uses your GPU through the host's Ollama).
-
-```bash
-docker build -t rag-portfolio .
-docker run --rm -p 8501:8501 --add-host=host.docker.internal:host-gateway rag-portfolio
-# then open http://localhost:8501
-```
-
-On the host, Ollama must accept connections from the container: start it with `OLLAMA_HOST=0.0.0.0 ollama serve` (by default it only listens on localhost). `OLLAMA_HOST` inside the container defaults to `http://host.docker.internal:11434`. `.env` is excluded from the image.
-
----
-
-## Results
-
-**RAGAS faithfulness.** Judge: `openai/gpt-oss-20b` on Groq. Same 30 questions for both setups (seed 42), k=2.
-
-| Setup | Faithfulness (30 questions) | Hit@2 | Recall@2 | MRR |
-|---|---|---|---|---|
-| BM25-weighted hybrid | 0.84 | 0.80 | 0.70 | 0.79 |
-| BM25-weighted hybrid + reranker | 0.88 | 1.00 | 0.96 | 0.96 |
-
-Hit@2, Recall@2 and MRR are computed against gold evidence on all 40 answerable questions, with no LLM.
-
-- **Faithfulness shows no measurable difference** between the two setups: 0.84 vs 0.88 is about one question and within the judge's noise. **The retrieval metrics show the reranker's advantage.**
-- **Answer relevancy was not run** (it can score 0 on a correct "Not documented" answer).
-- **Context precision and context recall are not LLM-scored**, because retrieval is measured against gold evidence.
-
-Sources: `eval/ragas_scores.json`, `eval/results.csv`, `eval/ablation_results.csv`. See [Known limitations](#known-limitations-and-findings) before quoting the scores.
 
 ---
 
