@@ -1,326 +1,125 @@
-# rag-portfolio
+# Forklift load volume from one video
 
-A RAG ("ask my documents") system built from scratch in plain Python, with a focus on **measuring quality honestly** instead of just showing a demo.
+**Problem.** In a public Linde video (https://www.youtube.com/watch?v=RCqa8Kojlw8, pass-by at about 20-22 s) a forklift drives past with a
+load of stacked crates on pallets. Estimate the load volume in m³ from the video alone. This is a prototype.
 
-It answers questions from a small set of drilling-report style documents, cites its sources, and is scored with an automated evaluation pipeline. Everything runs locally except the evaluation judge.
+**Run it:** `pip install -r requirements.txt`, then open `notebook.ipynb` and run all cells (or `python src/measure.py`, `python src/uncertainty.py`, `python src/make_results.py`; tests: `python -m pytest tests -q`). Final numbers: `outputs/results.json`.
 
-> **Status:** retrieval, reranking, cited generation and evaluation are working. Tracing, latency metrics and a code-level citation checker are working; CI regression gating is still to do (see [Roadmap](#roadmap)).
+## Result (short)
+* **Most likely scenario D (3 EUR pallets in a row, 2.4 x 1.2 m, 4 layers): about 3.6 m³ of load (80 % range 3.4-3.7 m³ inside D).** Load plus pallets about 4.0 m³.
+* **Across all scenarios that survive: about 1.8-3.7 m³**, depending on how many pallets are on the forks (C about 1.8, B about 2.4, D about 3.6; the 1.8 is C's median). A (1.14) is excluded.
+* **What decides it:** the number of pallets and the fork length (D needs a third pallet beyond 1200/1800 mm forks), plus the crate type. None of these is verified from the video alone.
+* The ranges inside a scenario are small (about 5 %); the choice of scenario is the big uncertainty (see "Two kinds of uncertainty").
 
----
+> **Status: no single final number.** Scenarios B, C and D are carried side by side, none is "main". The reason is two unverified facts:
+> **the crate type and the pallet layout in this video are NOT verified** (see Assumptions 1 and 2). Case A (one EUR pallet) is excluded.
 
-## How it works
+## Method in plain steps
+1. Download the video (`yt-dlp`, not stored in the repo) and pick sharp frames of the pass (`src/extract_frames.py`).
+2. Click corner points by hand on frames #1086, #1092, #1098 (`src/annotate.py`). #1092 was clicked twice to measure click error (mean 1.7 px, worst 9.8 px).
+3. Scale (mm per pixel) from the truck datasheet: mast height 2888 mm over the pixels from mast top to the floor under the front wheel. This is the **height ruler**.
+   The pallet height (144 mm on only about 30 px) is a **weak cross-check**: 1 px of error is about 3 %, the top edge is hard to see, and click error alone spreads the pallet-height
+   scale by about 15 % against about 1 % for the truck scale. The two scales disagree by 22-27 % (pallet scale larger), which is the main open problem.
+4. Load height = pixels x vertical scale. Length of the long face = pixels x scale **plus perspective**: the nearer end looks taller, the height ratio (1.15-1.17) tells how far the face is turned away
+   (about 22-25°). The truck gives a focal length of at most about 1270-1390 px (its clicked length against the datasheet length). `src/measure.py`
+5. Crate checks: count layers and crates, compare with real crate sizes (`src/crates.py`).
+6. Monte Carlo, 10,000 runs, inputs: click error, scale bias, fill factor, pallet tolerance, focal length (`src/uncertainty.py`).
 
-```
-Documents -> Chunk -> Embed (BGE) -> Chroma vector index
-                  \-> BM25 keyword index
+## Scenarios (width and crate type are not certain; none is chosen)
+Load-only volume, 80 % range from the Monte Carlo (`outputs/uncertainty.json`). Frames #1086/#1092/#1098 (clicked), pooled. Heights now use the **left-end** height with the truck scale
+(1.25 m = 4 layers x 312 mm); an earlier version used the mean height and understated it by about 8 %.
 
-Question -> Hybrid retrieval (BM25 + vectors, fused with RRF)
-         -> Cross-encoder reranker (BGE)
-         -> Local LLM answers with [n] citations
-```
-
-| Step | File | What it does |
-|---|---|---|
-| Chunking | `ingest/chunk.py` | Splits markdown by headers and paragraphs, then packs into 480-token chunks with 80-token overlap. Keeps a header breadcrumb such as `Installation > Requirements`, and puts a one-line label (`[Condor-9 \| Day 5 \| Mud Properties]`) at the top of every chunk so a chunk from the middle of a long report still says which report it belongs to. |
-| Embedding | `ingest/embed.py` | Embeds chunks with `BAAI/bge-base-en` and stores them in ChromaDB (cosine). Queries and documents are encoded separately. |
-| Keyword index | `ingest/bm25_index.py` | Builds a BM25 index. Chunk IDs match the vector index so the two result lists can be fused. |
-| Hybrid search | `retrieve/hybrid.py` | Runs BM25 and vector search separately (top 20 each), then fuses with Reciprocal Rank Fusion (k=60). Uses ranks only, because BM25 and cosine scores are not comparable. When the question contains an exact ID or number (`WO-98389`, `10,955`), BM25 gets weight 100 (see the ablation for why it has to be that large). |
-| Reranking | `retrieve/rerank.py` | `BAAI/bge-reranker-base` re-scores the top 10 candidates together with the question and keeps the best. |
-| Pipeline | `pipeline.py`, `main.py` | Chains search, rerank and generation, and frees the embedding model and reranker from GPU memory before the LLM loads. `main.py` is the command-line interface. |
-| Generation | `generate/answer.py` | Sends the chunks to a local Ollama model as numbered context and asks it to cite `[n]` for each claim. |
-| Tracing | `observability/` | `tracer.py` times each stage (bm25, vector, fusion, rerank, generate) and writes one JSON line per query to `logs/traces.jsonl`. `python -m observability.metrics` prints p50/p95 per stage. `generate/citations.py` checks `[n]` citations in code. |
-| Evaluation | `eval/` | Scores retrieval against gold evidence and answers with RAGAS (see below). |
-
-**Why plain Python?** No LangChain or LlamaIndex for the core pipeline. Every step is written out so it can be read and explained line by line.
-
----
-
-## Evaluation
-
-The test corpus is **synthetic**: 40 fictional daily drilling reports (8 wells) plus one unrelated software doc, made by `scripts/generate_docs.py` with a fixed seed. It is built to be hard: look-alike wells (Condor-7/Condor-9, Falcon-1/Falcon-3), values that change every day, near-duplicate sentences, and 10 long reports that split into two chunks.
-
-`eval/eval_set.json` has 45 questions (40 with gold evidence): single facts, look-alike wells, multi-hop (answer needs 2 chunks), "not documented" (tests hallucination), keyword-heavy (exact IDs and numbers), an `inference` question, one deliberately repeated question (for citation consistency), and two groups added later as checks on the first design (see below): 6 `keyword_holdout` and 9 `hard` questions (two wells or two days, look-alike numbers). Every answerable question carries gold evidence, so retrieval can be scored without an LLM.
-
-The eval is a two-step process, because the 4 GB GPU cannot hold the embedding model, the reranker and the LLM at the same time:
-
-1. `eval/run_retrieval.py` runs four setups for every question and saves the ranked chunks to `eval/retrieved.json`: **(a)** BM25 only, **(b)** vector only, **(c)** hybrid RRF, **(d)** hybrid + reranker, plus the BM25-weighted versions of (c) and (d).
-2. `eval/ablation.py` computes the free retrieval metrics (hit rate@k, recall@k, MRR) for all setups, with no LLM, and writes `eval/ablation_results.csv` (the numbers from before headers/weighting are kept in `eval/ablation_results_baseline.csv`). `eval/ablate_headers.py` splits the gain between the two retrieval changes.
-3. `eval/run_eval.py` generates answers for the two hybrid setups (`hybrid_weighted@2` and `hybrid_weighted_rerank@2`: BM25-weighted, without and with reranker, k=2 chunks; cached in `eval/generated.json`, `--generate-only` stops before any Groq call), then scores them with RAGAS. **This run uses the LLM judge for two metrics only:**
-   - **Faithfulness**: is the answer supported by the retrieved text?
-   - **Answer (response) relevancy**: does the answer address the question? (It can penalize correct refusals, see [Known limitations](#known-limitations-and-findings).)
-
-   The script can also score RAGAS **context precision** and **context recall**, but they are **not LLM-scored in this run**: retrieval quality is already measured against gold evidence (Hit@k, Recall@k, MRR), which is deterministic and cheaper. `--metrics` picks what to score (default: all four).
-
-Each metric is scored for **both** setups before the next one starts, faithfulness first. Scores are stored per setup, metric and question, so running with different `--metrics` fills separate slots and never rescores or overwrites another metric. Every score is saved as soon as it arrives (`eval/ragas_scores.json`, also written as a table to `eval/results.csv`), so a rate-limit stop loses nothing. A per-minute limit waits and retries; a daily limit stops the script, and the same command continues later. Averages appear in `python -m eval.ablation` only once all questions of a setup are scored for that metric. Re-run it after any step to refresh the tables.
-
-**Judge model: `openai/gpt-oss-20b` on Groq's free tier**, the same for both setups (RAGAS needs an LLM to grade answers), with local BGE embeddings for the relevancy metric. The model name is stored in `eval/ragas_scores.json`, `eval/results.csv` and `eval/ablation_results.csv`, and the script refuses to add scores from a different judge or question set to an existing file.
-
-### Judge cost and commands
-
-Estimates for both setups on the 30 questions. Input tokens are counted from the RAGAS prompts; output tokens (including the model's hidden reasoning) are assumed to be 250 / 500 / 1,000 per call.
-
-| Metric | Judge calls | Low | Expected | High |
+| | A: 1 EUR pallet | B: 2 pallets in a row (8 crates x 300 mm) | C: length from clicks | D: 3 pallets, 800 mm side along the forks |
 |---|---|---|---|---|
-| 1. Faithfulness | 120 | 146k | 176k | 236k |
-| 2. Answer relevancy | 60 | 41k | 56k | 86k |
-| **Total** | **180** | **187k** | **232k** | **322k** |
-
-At 200,000 tokens per day: faithfulness should fit in day 1 (2 days in the high case), and both metrics should be done on day 2.
-
-```bash
-# no Groq calls: cost estimate, then the questions and progress
-python -m eval.estimate_cost --subset 30 --seed 42 --metrics faithfulness,answer_relevancy
-python -m eval.run_eval --subset 30 --seed 42 --metrics faithfulness,answer_relevancy --list
-
-# 1) faithfulness first (uses Groq)
-python -m eval.run_eval --subset 30 --seed 42 --metrics faithfulness
-
-# 2) when faithfulness is complete: answer relevancy (uses Groq)
-python -m eval.run_eval --subset 30 --seed 42 --metrics answer_relevancy
-
-# tables, no Groq calls
-python -m eval.ablation
-```
-
-If the daily limit stops a command, run the same command again after the quota resets.
-
-### The 30-question subset
-
-To save quota, RAGAS runs on 30 of the 45 questions: `--subset 30`, a random sample with fixed seed 42 (not stratified, so category counts are uneven; for example, the `inference` question is not in it). Free retrieval metrics still use all 40 answerable questions.
-
-<details>
-<summary>The 30 questions</summary>
-
-1. `q01` (single_fact) What was the mud weight on Condor-7 on Day 4?
-2. `q02` (single_fact) What was the average rate of penetration on Falcon-1 Day 12?
-3. `q03` (similar_wells) Was anyone injured on Condor-7?
-4. `q06` (single_fact) Which well experienced downtime due to a cementing unit delay?
-5. `q07` (single_fact) What safety incident occurred on Falcon-1 Day 12?
-6. `q08` (single_fact) What was Falcon-1's mud weight on Day 13, and why was it increased?
-7. `q09` (repeat) What was Falcon-1's mud weight on Day 13, and why was it increased?
-8. `q14` (similar_wells) What was the mud weight on Condor-9 on Day 4?
-9. `q15` (similar_wells) What was the average rate of penetration on Falcon-3 Day 12?
-10. `q16` (similar_wells) What was the mud weight on Falcon-3 on Day 12?
-11. `q17` (similar_wells) What was Harrier-2's mud weight on Day 2?
-12. `q18` (similar_wells) Who prepared the Condor-9 report for Day 6?
-13. `q20` (multi_hop) How many hours of non-productive time did Osprey-5 record in total on Day 8 and Day 9?
-14. `q21` (multi_hop) Which day had the higher rate of penetration on Condor-9, Day 4 or Day 5, and by how much?
-15. `q23` (not_documented) What was the H2S level recorded on Osprey-5?
-16. `q26` (not_documented) What was the hole inclination at the end of Kestrel-4 Day 18?
-17. `q27` (keyword) Which well and day used bit serial number BS-85748?
-18. `q28` (keyword) What caused the downtime recorded under work order WO-98389?
-19. `q30` (keyword) Which well and day reached a depth of 10,955 ft?
-20. `q31` (keyword_holdout) Which well and day used bit serial number BS-67080?
-21. `q32` (keyword_holdout) Which report is work order WO-17861 in, and what was the cause?
-22. `q35` (keyword_holdout) Which report states an average rate of penetration of 20.9 ft/hr?
-23. `q36` (keyword_holdout) Which report lists a mud weight of 12.1 ppg?
-24. `q38` (hard) Which was drilling faster on Day 12, Falcon-1 or Falcon-3?
-25. `q39` (hard) Which had the higher funnel viscosity on Day 12, Falcon-1 or Falcon-3?
-26. `q40` (hard) Which had the higher chlorides on Day 13, Falcon-1 or Falcon-3?
-27. `q41` (hard) Which had the higher mud weight on Day 5, Condor-7 or Condor-9?
-28. `q42` (hard) What was the combined non-productive time of Falcon-1 and Falcon-3 on Day 12?
-29. `q43` (hard) How many rig crew were on site in total on Day 12, counting Falcon-1 and Falcon-3?
-30. `q44` (hard) By how much did Kestrel-4's mud weight change between Day 16 and Day 19?
-
-</details>
-
----
-
-## Known limitations and findings
-
-These are written down on purpose. A project that hides its problems cannot be trusted.
-
-**Found by the eval and fixed (kept here so the numbers make sense)**
-
-- **Chunks lost their context.** The second chunk of a long report (mud, downtime, safety) had no well name or day, so neither BM25 nor the embeddings could tell which report it came from. Fixed by putting a header on every chunk. Hit@2 for hybrid + reranker went from 0.84 to 0.96.
-- **Plain RRF buried exact-ID matches.** BM25 alone finds exact IDs and numbers, but plain hybrid pushed them down. With k=60, neighbouring ranks score almost the same, so a modest BM25 weight (3, 5, even 10) changed nothing; it only worked from 30 up. The weight is now 100 for questions that contain an exact ID or number (reasoning: it has to exceed about 62). **The rule was designed while looking at the first 4 keyword questions.** To check for overfitting I added 6 new keyword questions afterwards and did not tune on them:
-
-  | Hit / MRR | Plain hybrid | BM25-weighted hybrid |
-  |---|---|---|
-  | Design set (4 questions, rule fires on 4): Hit@2 / Hit@3 / MRR | 0.25 / 0.50 / 0.36 | 0.75 / 1.00 / 0.71 |
-  | **Holdout (6 new questions, rule fires on 4): Hit@2 / Hit@3 / MRR** | 0.17 / 0.67 / 0.36 | **0.67 / 0.83 / 0.67** |
-
-  So the gain holds up on new questions, but it is smaller than on the design set. The 2 holdout questions without an exact ID or number (a decimal ROP and a decimal mud weight) are not touched by the rule. Still only 10 questions in total.
-- **Nothing told the model to say "I don't know".** With a "Not documented in the provided context." instruction, 4 of 5 unanswerable questions are declined correctly (before: 1 of 5 cleanly). The software-doc question about `on_click` is still answered with invented behaviour, because the 3B model sees related text and fills the gap.
-- **Repeated questions differed between runs.** Ollama now runs at temperature 0 with a fixed seed; the repeated question gave 4 of 4 identical answers.
-
-**Still open**
-
-- **Small local model.** The machine has 4 GB of VRAM, so generation uses `llama3.2:3b`. Llama 3.1 8B ran out of memory, and a smaller model (`phi`) hallucinated badly. The 3B model sometimes leaves the `[n]` citation off; the citation checker flags these (see the eval output and `main.py` warnings). Missing-citation rate on the cached eval answers (45 questions per setup, k=2; on the 30-question RAGAS subset it is 1/30, 3.3%, for each): **hybrid 2/45 (4.4%), hybrid + reranker 2/45 (4.4%)**. Proper "Not documented" declines (13 and 15) need no citation; leaving them out, the rates are 2/32 (6.2%) and 2/30 (6.7%). No answer cites a number that does not exist. This is under the 20% threshold set for adding a citation retry, so there is none.
-- **Falcon-1 injury question is an inference, not a lookup.** Neither report says "no injuries" (Day 12: "no lost-time incidents", Day 13: "no incidents or near-misses"). The model says "no mention of anyone being injured" even when it is given both correct reports. Retrieval finds both chunks, so this is a reading weakness. It has its own category (`inference`) and was not tuned for.
-- **Section labels are approximate.** A chunk's section label comes from its first block, so a chunk that spans several sections names only the first. Some citations name the wrong section.
-- **The CLI reloads models on every question** (see [Latency](#latency)). The app avoids this by parking the models in RAM, but the LLM still has to unload after each answer so retrieval fits on the GPU, so generation always includes loading it.
-- **Context precision and context recall are not LLM-scored in this run.** Retrieval quality is measured against gold evidence instead (Hit@k, Recall@k, MRR), which is deterministic and cheaper. These are not the same numbers as the RAGAS metrics: they check whether the gold evidence was retrieved and how high it ranked, not how much of the retrieved text is irrelevant. They also cover all 40 answerable questions, not the 30-question subset.
-- **Groq free tier is a hard cap.** The judge model allows 200,000 tokens per day. The two-metric plan (both setups, 30 questions) is estimated at about 232,000 tokens (range 187,000-322,000, because the judge's output length is not known beforehand), so expect 2 days (see [Judge cost and commands](#judge-cost-and-commands)). All four metrics would be about 567,000.
-- **Answer relevancy penalizes correct refusals.** RAGAS scores an answer 0 on this metric when the judge calls it noncommittal, which is likely for "Not documented in the provided context." even when that is right. On the subset, 9 answers of hybrid and 8 of hybrid + reranker are such declines, so read this metric with that in mind.
-- **The eval set is small.** 45 questions (40 with gold chunks): one question moves a hit rate by 2.5 points, and results on subsets of 4-10 questions are only indicative.
-- **Synthetic data.** The reports are generated from templates, so wording is far more regular than real field reports.
-
----
-
-## What each retrieval change contributed
-
-The 2x2 below isolates the two changes (context headers on chunks, BM25-weighted RRF) on the 40 answerable questions (`python -m eval.ablate_headers`). "Keyword Hit@3" covers all 10 keyword questions.
-
-Without the reranker:
-
-| Variant | Hit@2 | Hit@3 | Recall@3 | MRR | Keyword Hit@3 |
-|---|---|---|---|---|---|
-| neither | 0.65 | 0.70 | 0.59 | 0.65 | 0.30 |
-| weighting only | 0.75 | 0.82 | 0.71 | 0.73 | 0.80 |
-| headers only | 0.68 | 0.82 | 0.71 | 0.71 | 0.60 |
-| **both** | **0.80** | **0.90** | **0.79** | **0.79** | **0.90** |
-
-With the reranker:
-
-| Variant | Hit@2 | Hit@3 | Recall@3 | MRR | Keyword Hit@3 |
-|---|---|---|---|---|---|
-| neither | 0.88 | 0.88 | 0.80 | 0.84 | 0.70 |
-| weighting only | 0.95 | 0.95 | 0.88 | 0.91 | 1.00 |
-| headers only | 0.95 | 0.95 | 0.94 | 0.93 | 0.80 |
-| **both** | **1.00** | **1.00** | **0.99** | **0.96** | **1.00** |
-
-Reading it: each change helps on its own, the gains roughly add up, and the reranker adds a large gain on top of either. Headers help most when the answer sits in the second chunk of a long report (Recall@3 0.80 -> 0.94 with the reranker); weighting helps most on exact-ID questions.
-
-**Hard questions** (9 questions that need two wells or two days; Recall counts both pieces of evidence): plain hybrid reaches Recall@2 0.50 and Recall@3 0.61; hybrid + reranker reaches 0.83 and 0.94. At k=2 the reranker still misses some second pieces of evidence, so k=3 is safer for multi-hop questions.
-
----
-
-## Latency
-
-Cold and warm are measured separately (`python scripts/measure_latency.py`, p50 / p95 in ms, this laptop with a 4 GB GPU). A single p95 over all queries is dominated by model loading, so it would mislead.
-
-| Stage | Cold: CLI, models reloaded every question (n=3) | Warm: app, models loaded once (n=10) |
-|---|---|---|
-| BM25 | 11 / 14 | 6 / 19 |
-| Vector search | 2,808 / 4,685 | 60 / 155 |
-| Rerank | 6,740 / 7,470 | 620 / 645 |
-| Generate (LLM) | 9,567 / 9,730 | 7,257 / 9,267 |
-| **Whole question** | **19,584 / 22,629** | **9,930 / 12,499** |
-
-The embedding model and reranker take about 10 s to load, once (app startup). Warm retrieval is under 1 s. Generation dominates warm latency because Ollama unloads the LLM after each answer (it has to, so the next retrieval fits on the GPU), and the warm total also includes about 2 s of moving the models between RAM and GPU. Small samples: treat these as orders of magnitude.
-
----
-
-## Demo app
-
-```bash
-streamlit run app.py          # needs Ollama running locally
-```
-
-Type a question to see the answer, the cited chunks in expandable boxes (cited ones open by default), and per-stage timing. The sidebar toggle turns the reranker off, so you can see it matter live: for "What was the mud weight on Condor-9 on Day 5?" the reranker on finds the right report; off, hybrid search alone returns the look-alike Condor-7 report and the model answers "Not documented".
-
-The embedder and reranker are loaded once and kept in RAM; they move to the GPU only while retrieving, then step aside so the LLM fits in 4 GB (measured: both on the GPU use 1.4 GB, which leaves too little for Ollama).
-
-<!-- SCREENSHOT PLACEHOLDER: add docs/app.png and replace this line with ![Streamlit app](docs/app.png) -->
-*(Screenshot to be added.)*
-
-### Docker
-
-Ollama runs on the **host**, not in the container. The image holds the app, the models and the index (CPU-only PyTorch, so the embedder and reranker run on the CPU inside the container; the LLM still uses your GPU through the host's Ollama).
-
-```bash
-docker build -t rag-portfolio .
-docker run --rm -p 8501:8501 --add-host=host.docker.internal:host-gateway rag-portfolio
-# then open http://localhost:8501
-```
-
-On the host, Ollama must accept connections from the container: start it with `OLLAMA_HOST=0.0.0.0 ollama serve` (by default it only listens on localhost). `OLLAMA_HOST` inside the container defaults to `http://host.docker.internal:11434`. `.env` is excluded from the image.
-
----
-
-## Results
-
-> **Pending.** The final table (RAGAS faithfulness and answer relevancy for hybrid and hybrid + reranker, k=2, on the 30-question subset, judge `openai/gpt-oss-20b` on Groq; retrieval quality comes from Hit@k, Recall@k and MRR) is not written yet. It waits for the Groq daily quota; see `eval/run_eval.py`. The retrieval-only results above do not need Groq and are final for this corpus.
-
-<!-- RESULTS-TABLE-PLACEHOLDER: replace this block with the RAGAS table from `python -m eval.ablation` -->
-
----
-
-## Data
-
-The sample documents are **synthetic** (a fictional widget framework doc and made-up daily drilling reports). No real client or well data is in this repository.
-
----
-
-## Setup
-
-Requires Python 3.10+, [Ollama](https://ollama.com), and ideally an NVIDIA GPU.
-
-```bash
-git clone https://github.com/alphindas/rag-portfolio.git
-cd rag-portfolio
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-ollama pull llama3.2:3b
-```
-
-For evaluation, create a `.env` file with your free Groq API key:
-
-```
-GROQ_API_KEY=your_key_here
-```
-
-Generate the synthetic documents and eval questions (already committed, so this is optional; same seed gives the same files):
-
-```bash
-python scripts/generate_docs.py
-```
-
-Build the indexes (reads every `.md` file in `sample_docs/`), then ask a question:
-
-```bash
-python ingest/build_index.py
-python main.py                                   # interactive
-python main.py --question "What was the mud weight on Condor-7 on Day 4?"
-```
-
-Latency and citation statistics from the trace log (`logs/traces.jsonl`, written by every question):
-
-```bash
-python -m observability.metrics
-```
-
-Run the tests (no GPU, Ollama or API key needed):
-
-```bash
-pytest
-```
-
-Run the evaluation (run from the repo root):
-
-```bash
-python -m eval.run_retrieval     # GPU: embedder + reranker, then exits
-python -m eval.ablation          # free retrieval metrics, no LLM
-# Ollama generation + Groq-judged RAGAS (needs GROQ_API_KEY); see "Judge cost and commands"
-python -m eval.run_eval --subset 30 --seed 42 --metrics faithfulness
-python -m eval.run_eval --subset 30 --seed 42 --metrics answer_relevancy
-python -m eval.ablation          # table again, now including RAGAS
-```
-
----
-
-## Roadmap
-
-- [x] Chunking, embeddings, BM25 index
-- [x] Hybrid retrieval with RRF fusion
-- [x] Cross-encoder reranking
-- [x] Local LLM generation with citations
-- [x] RAGAS evaluation pipeline
-- [x] Tracing and latency logging (p50 / p95)
-- [ ] GitHub Actions: run the eval on every push and fail on quality regression
-- [x] Code-level citation checker
-- [x] Larger, harder synthetic corpus with gold evidence
-- [x] Context headers on chunks, BM25-weighted fusion for exact IDs
-- [x] Streamlit demo with reranker toggle and per-stage timing
-- [x] Dockerfile (Ollama on the host)
-- [ ] RAGAS results table (waiting on Groq quota)
-- [ ] Better chunk-level section labels
-
----
-
-## Tech stack
-
-Python, ChromaDB, `rank_bm25`, `sentence-transformers` (BGE embeddings and reranker), Ollama (`llama3.2:3b`), RAGAS, Groq (judge: `openai/gpt-oss-20b`).
+| Length x width | 1.2 x 0.8 m | 2.4 x 0.8 m | about 1.8 x 0.8 m | 2.4 x 1.2 m |
+| Height | 1.25 m (image) | 4 x 0.29-0.36 m | 1.25 m (image) | 4 x 0.310-0.333 m (**assumption**, see below: catalogue range of a 12 x 0.75 L crate 400x266, not measured on this crate) |
+| Load only | 1.14 (1.04-1.24) | 2.37 (2.15-2.59) | 1.75 (1.47-2.06) | **3.56 (3.38-3.74)**; crates x crate volume (108 crates): 3.70 (3.59-3.80) |
+| Load + pallets | 1.27 | 2.65 | 1.96 | 3.97 |
+| Width 1.2 m instead of 0.8 m | 1.70 | 3.55 | 2.62 | (already 1.2 m) |
+
+### New clicks: frames #1062 and #1068 (`src/new_frames.py`, `outputs/new_frames.json`)
+The right end of the load is cut off by the frame edge in both, so only the left-end height and a length lower bound can be measured. Frame #999 was skipped for the same reason.
+* **Height (truck scale, left end):** #1062 1.29 m, #1068 1.28 m (per layer 323 / 320 mm), against 1.24-1.25 m in #1086/#1092/#1098. All 5 frames: 1.24-1.29 m, mean 1.26 m (spread 4 %). The change is about +3 %, well under 10 %, so the Monte Carlo
+  numbers above are **not changed**; the per-layer height of 320-323 mm lies inside D's assumed 310-333 mm.
+* **Length:** in #1068 the top edge is at least 597 px long (clicked right end at x = 1903, at the frame edge), which is at least **1.96 m** at the left-end scale (±15 % for the unknown depth of the right end). So the load is **longer than about 1.9 m**.
+  This is a lower bound only: it leaves C (about 1.8 m, 1.47-2.06) very tight and does not separate B from D (both 2.4 m). D's length (3 x 0.8 m) comes from the counts and is unchanged.
+* The near-frontal frame did not give a ratio (right-end clicks missing), so the turn angle is still from #1086-#1098.
+
+### Two kinds of uncertainty (do not mix them)
+**(a) Inside one scenario.** The Monte Carlo ranges above (for D: 3.38-3.74 m³, crates x volume 3.59-3.80) only cover click error, scale bias, fill factor, pallet tolerance, gap and focal length.
+They assume that the scenario itself is right. They are the *small* uncertainty.
+
+**(b) Which scenario is right.** This is the *large* one and the Monte Carlo does not cover it: the load-only medians run from 1.75 (C) over 2.37 (B) to 3.56 m³ (D), a factor of about 2 between the ends,
+and A (1.14) is excluded. It depends on facts that are not verified: the crate type, how many pallets are on the forks, and the load depth (0.8 or 1.2 m). Today the evidence favours D, but D still has an open problem
+(the fork tips, see the consistency table). "They carry several pallets together" is **likely** (blue-load seam, 5-tine carriage at 52 s, see Assumption 14) but **unverified**; Carolinen could not be asked.
+So D's range must not be quoted as the whole uncertainty. The honest statement today is "about 1.8-3.7 m³ depending on the scenario, D most likely, and within D 3.4-3.7 m³".
+
+### Consistency table (what each scenario has to explain)
+Facts read from the frames: **9 crate columns on every row** (frame #999, where the left end is visible), **4 layers**, **3 white labels, one per 3 columns** (spacing 3.1, 3.3, 3.0 columns in #999; 3.2 in #1008; 3.0 in #1092),
+**about 9 pallet feet** in 3 groups of 3 (8 clearly seen in #999 plus one at the frame edge; two pairs of feet side by side where two pallets would meet).
+
+| Test | A | B | C | D |
+|---|---|---|---|---|
+| 9 columns, 3 labels, 9 feet | no | no (expects 8 columns, 2 labels, 6 feet) | not tested | **yes** |
+| Length vs measured (#999: 2.45-2.72 m, proposed points; #1092: 2.05-2.20 pallet scale, 1.79-1.92 truck scale) | no (1.2 m) | yes for #999 and pallet scale, 25 % long for #1092 truck scale | yes for #1092 truck scale, 30 % short for #999 | same as B |
+| Height 1.25-1.5 m measured (4 layers = 310-375 mm per layer) | ok | ok | ok | **yes** (1.24-1.33 m) |
+| Crate cell width/height measured 0.81-0.91 (apparent, from window pitch) | - | 300 x 290 needs a 24-37 deg turn (turn estimate 12-27 deg): borderline | borderline | 266 x 310-333 predicts 0.82-0.88: **fits** (needs a nearly frontal face) |
+| Fork tips (datasheet 1200 or 1800 mm) | fits | 2.4 m deep: overhangs 1.2 / 0.6 m | 1.8 m fits 1800 mm forks | same as B: pallet 3 hangs 1.2 m (1200 mm forks) or 0.6 m (1800 mm forks) beyond the tips |
+| Verified crate for the count | - | 300 mm side: 20 x 0.5 L only | no crate with a 200 mm side along 9 columns in 1.8 m (9 x 0.2) | 12 x 0.75 L crate 400 x 266 exists (Delbrouck), 9 per layer and 4 layers as in the Wasserhelden pallet data |
+
+**What survives.** A is excluded (counts and length). B as defined does not survive the counts (it needs 8 columns, not 9). C survives only on one frame's truck scale and conflicts with the counts, with frame #999, and with
+a plain 266/300 crate. D survives the counts, the length (on 3 of 4 estimates), the height and the crate type, but it has to explain why the third pallet hangs over the fork tips, and it differs by 20-25 % from the #1092 truck-scale length.
+The datasheet lists no fork longer than 1800 mm for the E80 but mentions "hook-on and integrated attachments" without sizes, so a longer reach is possible but unverified. No scenario is selected here.
+
+* **Same load, two views.** In #999 the right end is nearer (edge height ratio 0.80); in #1092 the left end is nearer (1.17). The truck swings during the pass. With the pallet-height scale the two frames give 2.45-2.56 m and 2.05-2.20 m
+  (12 % apart); with the truck scale 2.60-2.72 m and 1.79-1.92 m (about 40 % apart). So the truck scale at #1092 is the least reliable number. #999 values come from points **read by eye by Claude, not clicked by you**.
+* Case A is excluded: the pallet long edge is about 14 times its height in the image (a 1200 x 144 mm face would be 8.3).
+
+## Where the crate type came from (and did not)
+* Stickers on the crates were cropped at full resolution and upscaled 6 times (`outputs/stickers_sheet.png`): they show paper labels with text lines and two barcodes. **Nothing is readable** (no brand, pack size or article number).
+* The video's title card says "LINDE E80 IN DER GETRÄNKEINDUSTRIE, Carolinenbrunnen, Bielefeld"; a caption names Mineralquellen Wüllner GmbH & Co. KG. So the plant is known, the crate is not.
+* No Carolinen datasheet with crate size was found. REWE product pages could not be read by script.
+* Real crates that exist (manufacturer catalogue Delbrouck, read directly): 20 x 0.5 L 400x300x290-302; 12 x 0.75 L 400x266x310-333 and 400x300x291-360; 12 x 1 L 400x300x310-330 and 400x266x314; 12 x 0.7 L 375x266x305.
+* A returnable GDB 0.75 L crate of another brand: 9 crates per layer, 4 layers, EUR pallet (Wasserhelden "Artikelpass"). Layers match our 4; the crate size is not given there.
+* Blue crate pallet in the background (about 93 s, light blue, corner view, partly hidden by the truck): 5 layers, at least 6-7 columns on its long face. **Not conclusive** for a crate size.
+
+## Assumptions (every one of these is a guess or an unverified fact)
+1. **Crate type is NOT verified for this video.** Heights of 0.29-0.36 m are the range of real 20 x 0.5 L and 12-bottle crates (sources below), not a match for the video's crate.
+2. The pallets are EUR pallets (1200 x 800 x 144 mm). No EPAL mark or block count could be confirmed. +-3 mm per pallet and a 0-30 mm gap between two pallets are assumed.
+3. Load width (depth into the picture) is 0.8 m (alt. 1.2 m). Not visible in this view.
+4. Forklift model "Linde E80" comes from the video's own title card. Datasheet: Linde E60/E80, series 1279 (4.2 mast height lowered 2888 mm; 4.20 length to fork face 3503 mm; 4.22 forks 1200 mm for the
+   600 mm load-centre version, 1800 mm for the 900 mm version; 4.24 carriage width 2180 mm). Which variant is in the video is **not known**. Fork spacing is not in the datasheet.
+5. Truck scale error from different depths (mast vs. wheel): +-10 % (assumed). The pallet-height scale disagrees by 22-27 %, outside this band, so that gap is carried as the two scenarios.
+6. Camera: ideal pinhole, image centre as principal point, no lens distortion; focal length 800-1400 px (upper limit from the truck geometry, lower limit a wide-angle guess).
+7. The long face is a flat rectangle with equal vertical edges (the height ratio left/right comes from perspective only).
+8. Fill factor 0.90-1.00 (share of the bounding box that is filled). Click error: 2-5 px for sharp points, 10 px for blurry points.
+9. Crate count: 4 layers (counted by two people, re-checked on a close crop), 8 crates along the lower rows (9 in the top row, left end hidden by the fork carriage).
+10. Frame #1098: the "truck rear" click is a different feature than in the other frames; it is not used for volumes.
+11. Frames #1086-#1098 are only 0.1-0.24 s apart; their errors are correlated. Frame #999 (19.98 s) shows the whole face from the other side of the turn; its corner points were **read by eye by Claude and are not verified** (`src/early_frames.py`).
+12. Extra frames used (not stored in the repo, see timestamps): green-crate close-up 16.0-17.5 s; blue-crate loads 115.4 s, 117.1 s, 138.5-139.6 s, 140-142 s; early pass 19.7-20.3 s. In the close-up the bottle labels read "Carolinen naturelle".
+14. **Empty forks found (video 51-52 s, frames 02575-02625 in `extra_pics/`):** a Linde truck of the same family with a very wide carriage and **5 fork tines** (so a multi-pallet fork is in use at this plant).
+   It is an oblique view and probably a different truck, so it does not prove the pass-by truck has the same forks. Fork length cannot be read from this shot: the tines point partly towards the camera, and with the unknown turn
+   angle the image gives only the relation length = 1.4 m / tan(angle between the forks and the camera direction), from about 290 px of sideways tine extent against about 445 px of carriage width (2180 mm datasheet). No second view with a visible fork tip at the far end of the pass-by load was found.
+15. **Crate height 310-333 mm in D comes from a catalogue range** (Delbrouck, 12 x 0.75 L, 400 x 266 x 310-333, URL in Sources). It is the height range of products that exist, **not verified for the crate in this video**. The measured load height (1.24-1.33 m, truck scale) is consistent with 4 layers of that range, but that is a consistency check, not a source.
+13. Blue-crate loads (Carolinen crates, 5 layers) show a seam in the middle of the pallet and 3 crates per pallet along a face, with 6 crates across in the front view. This suggests the plant carries several pallets together, but it does not fix the crate size.
+
+## Sources
+* Linde E60/E80 datasheet (series 1279): https://www.linde-mh.com/media/Datasheets/EN_ds_e60_e80_1279_en_b_0224_view.pdf
+* IPL Schoeller crates 3150001 (400x300x290) and 3283001 (400x300x300): https://www.iplschoeller.com/products/3150001-beverage-crate-20x50cl , https://www.iplschoeller.com/ch/produkte/3283001-beverage-crate-20x50cl
+* Delbrouck crate catalogue: https://www.delbrouck.de/en/getraenkekaesten/
+* Paderborner datasheets (20 x 0.5 L crate 40x30x30 cm, 8 per layer, 5 layers, 161 cm with pallet): https://paderborner-brauerei.de/wp-content/uploads/2025/08/2025_08_26_PB-Export_Datenblatt_20x05l_web.pdf , https://paderborner-brauerei.de/wp-content/uploads/2024/02/PB_Limo_Cola-Orange_DB_Fl_05lx20.pdf
+* Wasserhelden Artikelpass (0.75 L GDB crate, 9 per layer, 4 layers): https://produktinfo.blauer-engel.de/uploads/pdf_uploads/Artikelpass%20Wasserhelden_ohne%20Preise.pdf
+* Video: https://www.youtube.com/watch?v=RCqa8Kojlw8 (frames at 21.72 s, 21.84 s, 21.96 s)
+
+## Where this method would fail
+* **Load is not a box** (gaps, overhang, shrink-wrap, a half-empty top layer): the box volume is then too high; the fill factor 0.90-1.00 is a guess.
+* **Hidden or non-EUR pallet**, or a different pallet height than 144 mm: the pallet-height scale breaks (it is already the weak scale, about 30 px).
+* **Depth (load width) is a guess** (0.8 or 1.2 m, not visible from the side). This alone changes the volume by 50 %.
+* **Wrong number of pallets / crate type** (the main open point here): the volume scales with length.
+* **Steep or unknown camera angle, lens distortion:** one-camera perspective is simplified (pinhole, no distortion); a wide-angle lens bends the edges. Focal length is only bounded (800-1400 px).
+* **Truck scale at different depths** (mast vs. load): up to about 10 % assumed; it was 40 % off for the length in one frame.
+* **Motion blur and cut-off frames:** click error 2-10 px; the right end of the load was out of frame in several frames.
+* **Next steps:** a second camera or a depth sensor (gives width and true length directly), a frame with the pallets and fork tips visible, a known reference object in the load plane, a crate datasheet from the plant.
+
+## Still open
+Frames #999 and #1014 were not clicked (the right end is cut off), so the #999 points in `src/early_frames.py` stay Claude's eyeballed, **unverified** readings. Crate type, number of pallets and fork length of the pass-by truck are not verified (the plant could not be asked).
