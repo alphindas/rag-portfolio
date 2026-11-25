@@ -44,8 +44,10 @@ if question:
         st.stop()
 
     st.subheader("Answer")
+    if result["warning"]:
+        st.error(result["warning"])
     st.write(result["answer"])
-    status = result["citations"]["status"]
+    status = (result["citations"] or {}).get("status")
     if status == "no_citations":
         st.warning("This answer has no [n] citations, so it is not verified against the sources.")
     elif status == "invalid":

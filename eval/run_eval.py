@@ -50,7 +50,7 @@ from ragas.metrics import (
 )
 from ragas.run_config import RunConfig
 
-from generate.answer import generate_answer
+from generate.answer import PromptTooLongError, generate_answer
 from generate.citations import check_citations
 from observability.tracer import Trace
 
@@ -102,9 +102,17 @@ def generate_for_run(retrieved: list[dict], run: str, generated: dict) -> dict:
         print(f"[{run}] [{i}/{len(retrieved)}] generating: {q['user_input']}")
         chunks = chunks_for_run(q, run)
         trace = Trace(q["user_input"], source="eval_generation", run=run, question_id=q["id"])
-        with trace.stage("generate"):
-            result = generate_with_retry(q["user_input"], chunks)
-        trace.finish(answer=result["answer"], citations=check_citations(result["answer"], len(chunks)))
+        try:
+            with trace.stage("generate"):
+                result = generate_with_retry(q["user_input"], chunks)
+        except PromptTooLongError as e:  # never cache or score an answer to a cut-off prompt
+            trace.finish(answer=None, warning=str(e))
+            raise SystemExit(f"[{run}] {q['id']}: {e}")
+        warning = result.get("warning")
+        if warning:
+            print(f"  WARNING: {warning}")
+        trace.finish(answer=result["answer"], citations=check_citations(result["answer"], len(chunks)),
+                     **({"warning": warning} if warning else {}))
         answers[q["id"]] = {"answer": result["answer"]}
         with open(GENERATED_PATH, "w") as f:  # save as we go
             json.dump(generated, f, indent=2)

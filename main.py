@@ -20,11 +20,13 @@ def ask(question: str) -> None:
     except ConnectionError:
         raise SystemExit("Could not reach Ollama. Is it running? (ollama serve)")
 
+    if result["warning"]:
+        print(f"\n[warning] {result['warning']}")
     print("\n=== Answer ===")
-    print(result["answer"])
+    print(result["answer"] or "(no answer)")
     print("\n=== Sources ===")
     print(format_sources(result["chunks"]))
-    status = result["citations"]["status"]
+    status = (result["citations"] or {}).get("status")
     if status == "no_citations":
         print("\n[warning] the answer has no [n] citations, so it is not verified against the sources.")
     elif status == "invalid":

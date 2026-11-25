@@ -18,7 +18,7 @@ from pathlib import Path
 from retrieve.hybrid import hybrid_search  # also puts ingest/ on sys.path
 import retrieve.rerank as rerank_module
 import embed as embed_module  # the same module object hybrid.py uses
-from generate.answer import generate_answer
+from generate.answer import PromptTooLongError, generate_answer
 from generate.citations import check_citations
 from observability.tracer import Trace
 
@@ -74,7 +74,9 @@ def warm_up() -> float:
 
 def run_query(question: str, source: str = "cli", use_reranker: bool = True, keep_models: bool = False) -> dict:
     """
-    Returns {"answer", "chunks", "citations" (checked in code), "timings" (ms per stage)}.
+    Returns {"answer", "chunks", "citations" (checked in code), "warning", "timings" (ms per stage)}.
+    If the prompt is too long for the LLM, "answer" is "", "citations" is None
+    and "warning" says why.
     Also appends one line describing the query to logs/traces.jsonl.
 
     keep_models=False (CLI): drop the embedder + reranker after retrieval, so
@@ -92,11 +94,16 @@ def run_query(question: str, source: str = "cli", use_reranker: bool = True, kee
     else:
         chunks = candidates[:FINAL_TOP_K]
     park_models() if keep_models else free_gpu_models()
-    with trace.stage("generate"):
-        result = generate_answer(question, chunks)
-    citations = check_citations(result["answer"], len(chunks))
-    trace.finish(answer=result["answer"], citations=citations)
-    return {"answer": result["answer"], "chunks": chunks, "citations": citations, "timings": trace.timings()}
+    try:
+        with trace.stage("generate"):
+            result = generate_answer(question, chunks)
+    except PromptTooLongError as e:
+        result = {"answer": None, "warning": str(e)}
+    answer, warning = result["answer"], result.get("warning")
+    citations = None if answer is None else check_citations(answer, len(chunks))
+    trace.finish(answer=answer, citations=citations, **({"warning": warning} if warning else {}))
+    return {"answer": answer or "", "chunks": chunks, "citations": citations, "warning": warning,
+            "timings": trace.timings()}
 
 
 def format_sources(chunks: list[dict]) -> str:

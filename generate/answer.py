@@ -39,9 +39,62 @@ sample_docs it points to.
 
 from __future__ import annotations
 
+import re
+
 import ollama
 
 OLLAMA_MODEL = "llama3.2:3b"
+# Context window in tokens: it must hold the prompt AND the answer. 2560 is the
+# largest size at which llama3.2:3b ran 100% on the GPU on the 4 GB card this was
+# built on (Ollama 0.33.1, `ollama ps`); from 2624 up, part of it moved to the CPU.
+NUM_CTX = 2560
+NUM_PREDICT = 512   # maximum answer length in tokens
+
+
+class PromptTooLongError(RuntimeError):
+    """The prompt does not fit in NUM_CTX, so no answer was generated."""
+
+    def __init__(self, prompt_tokens: int | None, num_ctx: int):
+        self.prompt_tokens, self.num_ctx = prompt_tokens, num_ctx
+        size = f"{prompt_tokens} tokens" if prompt_tokens else "too long"
+        super().__init__(f"Prompt is {size}, but num_ctx is {num_ctx}. No answer was generated, because "
+                         "Ollama would have silently cut off part of the context. "
+                         "Use fewer or shorter chunks, or raise NUM_CTX.")
+
+
+def _chat(prompt: str):
+    """One Ollama chat call that REFUSES an over-long prompt.
+
+    By default Ollama silently drops part of a prompt that exceeds num_ctx.
+    With "truncate": false the server rejects it instead and reports the real
+    token count (its own tokenizer, so no estimate on our side, and no extra
+    call). ollama-python 0.6.3 chat() has no `truncate` argument, hence the
+    private _request(), which keeps OLLAMA_HOST handling and error types.
+    Checked with Ollama server 0.33.1; a server that does not know the field
+    would ignore it. "shift": false likewise stops the server from dropping old
+    tokens if the context fills up while the answer is being written.
+    """
+    body = {
+        "model": OLLAMA_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False,
+        "truncate": False,
+        "shift": False,
+        "options": {
+            "temperature": 0,  # same prompt -> same answer (repeatable evals)
+            "seed": 0,
+            "num_predict": NUM_PREDICT,
+            "num_ctx": NUM_CTX,
+        },
+        "keep_alive": 0,  # unload the model from VRAM immediately after this response
+    }
+    try:
+        return ollama.Client()._request(ollama.ChatResponse, "POST", "/api/chat", json=body)
+    except ollama.ResponseError as e:
+        if "exceed_context_size" not in str(e.error):
+            raise
+        count = re.search(r"n_prompt_tokens\W+(\d+)", str(e.error))
+        raise PromptTooLongError(int(count.group(1)) if count else None, NUM_CTX) from e
 
 
 def _build_context_block(chunks: list[dict]) -> str:
@@ -84,6 +137,10 @@ def generate_answer(query: str, chunks: list[dict]) -> dict:
 
     chunks: the reranked list from retrieve/rerank.py (top_k results,
     each with at least "text", "header_path", "source").
+
+    Raises PromptTooLongError instead of answering from a cut-off prompt. The
+    result has a "warning" key if the prompt fits but leaves less than
+    NUM_PREDICT tokens for the answer.
     """
     if not chunks:
         return {
@@ -109,30 +166,14 @@ Example of correct style:
 "The widget re-renders when its state changes [1]. Call self.rerender() to trigger this manually [1]."
 """
 
-    response = ollama.chat(
-        model=OLLAMA_MODEL,
-        messages=[
-            {"role": "user", "content": user_prompt},
-        ],
-        options={
-            "temperature": 0,  # same prompt -> same answer (repeatable evals)
-            "seed": 0,
-            "num_predict": 512,
-            "num_ctx": 1024,  # reduced from 2048 -- our prompts (5 short DDR
-                               # chunks + question) are nowhere near that size,
-                               # and a smaller KV-cache needs less contiguous
-                               # VRAM to allocate, giving more headroom against
-                               # OOMs on this 4GB card
-        },
-        keep_alive=0,  # unload the model from VRAM immediately after this response
-    )
+    response = _chat(user_prompt)
 
-    answer_text = response["message"]["content"]
-
-    return {
-        "answer": answer_text,
-        "sources": sources_list,
-    }
+    result = {"answer": response["message"]["content"], "sources": sources_list}
+    prompt_tokens = response["prompt_eval_count"]
+    if prompt_tokens and prompt_tokens > NUM_CTX - NUM_PREDICT:
+        result["warning"] = (f"Prompt is {prompt_tokens} of {NUM_CTX} tokens, leaving fewer than {NUM_PREDICT} "
+                             "for the answer, so the answer may be cut off.")
+    return result
 
 
 if __name__ == "__main__":

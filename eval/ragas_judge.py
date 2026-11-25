@@ -38,7 +38,7 @@ def get_evaluator_llm():
         # One judge for every run, so the setups are compared like for like.
         model=JUDGE_MODEL,
         temperature=0,
-        max_tokens=4096,  # faithfulness scoring asks the judge to list out
+        max_tokens=16384,  # faithfulness scoring asks the judge to list out
                            # every factual statement in an answer before
                            # checking each one -- without an explicit ceiling,
                            # ChatGroq falls back to a default too small for
